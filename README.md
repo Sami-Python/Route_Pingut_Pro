@@ -32,3 +32,7 @@ Koska toimeksiannot vaihtelevat laajudeltaan ja sisällöltään jonkin verran, 
     OPPIMISPÄIVÄKIRJA: Jäsenten tulee pitää henkilökohtaista oppimispäiväkirjaa, jossa he reflektoivat oppimiskokemuksia, haasteita ja projektin aikana tehtyjä oivalluksia. Oppimispäiväkirjasta tulee löytyä projektissa käytetty työaika, sekä yhteenveto tekemistäsi tehtävistä.
 
 Dokumentoinnissa ja raportoinnissa pyritään riittävän hyvään - ei lähdetä rakentamaan näistä liian raskasta prosessia.
+
+## Linkkejä
+
+- Ryhmän blogi: https://gitlab.dclabra.fi/wiki/gVgp2Z4WSLugvnE6BPzltw?view
