@@ -36,3 +36,27 @@ Dokumentoinnissa ja raportoinnissa pyrit채채n riitt채v채n hyv채채n - ei l채hdet�
 ## Linkkej채
 
 - Ryhm채n blogi: https://gitlab.dclabra.fi/wiki/gVgp2Z4WSLugvnE6BPzltw?view
+
+## Arkkitehtuuri
+
+```mermaid
+%%{init: { "fontFamily": "GitLab Sans" }}%%
+architecture-beta
+    group api(cloud)[API gateway]
+    group front(internet)[Front]
+    group storage(disk)[Storage]
+    
+    service ui(internet)[Streamlit]in front
+    service auth(internet)[Autentikointi]in front
+
+    service db(database)[Database] in storage
+    
+    service fmi(server)[FMI] in api
+    service fintraf(server)[Fintraffic] in api
+    service hsl(server)[HSL] in api
+    service maps(server)[Maps] in api
+    
+    ui:R -- L:auth
+    auth{group}:B -- T:db{group}
+    ui{group}:L -- R:fmi{group}
+```
