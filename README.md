@@ -40,3 +40,42 @@ Dokumentoinnissa ja raportoinnissa pyritään riittävän hyvään - ei lähdet�
 ## Arkkitehtuuri
 
 ![arkkitehtuuri](./img/arkkitehtuuri.png)
+
+
+## MkDocs + Nginx (Docker) lyhyet käyttöohjeet
+
+- Dockerfile rakentaa MkDocs-sivuston (mkdocs build) pakkaa valmiit HTML-sivut Nginx-palvelimeen
+- nginx.conf määrittää miten Nginx palvelee staattisia sivuja.
+- docker-compose.yml / käyttää automaattista uudelleenkäynnistystä
+- käyttää porttia .env-tiedostosa
+
+**Buildaa konntti**
+```
+docker compose build
+```
+
+**Käynnistä Docker**
+```
+docker compose up -d
+```
+Localhost ->
+```
+http://localhost:8080
+```
+
+*Kun muokkaat MkDocsia, buildaa ja käynnistä kontti uudellen*
+
+Sammuta
+```
+docker compose stop
+```
+Poista kontti
+```
+docker compose down
+```
+Mikäli jotain jää kummittelemaan aja
+```
+docker compose down --volumes --remove-orphans
+docker compose build
+docker compose up -d
+```

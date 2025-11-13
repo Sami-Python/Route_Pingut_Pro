@@ -1,0 +1,15 @@
+image: python:3.12
+
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  script:
+    - pip install -r requirements.txt
+    - mkdocs build
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
