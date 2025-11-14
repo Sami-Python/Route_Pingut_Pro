@@ -12,6 +12,6 @@ pages:
     - uv pip install -r docs/doc-requirements.txt --system
     - uv run --directory "docs" mkdocs build --verbose --site-dir "../public"
   pages: true # publishes the default public directory
-  #rules:
-  #  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH   # Deploy only on main branch
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH   # Deploy only on main branch
 
