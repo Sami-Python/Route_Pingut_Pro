@@ -1,0 +1,18 @@
+image: ghcr.io/astral-sh/uv:python3.12-bookworm
+
+stages:
+  - deploy
+
+deploy-pages:
+  stage: deploy
+  # Rakenna MkDocs-sivusto docs-kansiosta public-kansioon
+  script:
+    - uv sync --directory docs
+    - uv run --directory docs mkdocs build --strict --verbose --site-dir ../public
+
+  # Kerro GitLabille, että tämä jobi julkaisee GitLab Pages -sivuston
+  pages: true
+
+  # Aja vain oletushaarassa (yleensä main)
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

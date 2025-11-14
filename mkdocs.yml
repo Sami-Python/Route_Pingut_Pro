@@ -1,0 +1,111 @@
+
+site_name: Pingut Projekti 4
+site_description: Dokumentaatio (Material for MkDocs -teemalla)
+site_author: Sami
+site_dir: public
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.instant
+    - content.code.copy
+    - toc.integrate
+    - search.highlight
+    - search.suggest
+
+nav:
+  - Aloitussivu: 
+      - Projekti 4 Mikropalvelu - Pingut: index.md
+      - 1 Johdanto: johdanto.md
+      - 1.1 Projektin tausta: projektin-tausta.md
+      - 1.2 Tärkeät linkit: tarkeat-linkit.md
+      - 1.2 Projektin tavoite: projektin-tavoite.md
+      - 1.3 Ohjeistus: ohjeistus.md
+      - 1.4 Rajaukset ja oletukset: rajaukset-ja-oletukset.md
+      - 2 Projektitiimi: projektitiimi.md
+      - 2.1 Tiimin kokoonpano: tiimin-kokoonpano.md
+      - 2.2 Vastuualueet ja osaamisjako: vastuualueet-ja-osaamisjako.md
+      - 2.3 Yhteistyö ja viestintäkäytännöt: yhteistyokaytannot.md
+  - Tekninen dokumentaatio:
+    - 3 Työkalut ja teknologiat: tyokalut-ja-teknologia.md
+    - 3.1 Kehitysympäristö: kehitysymparisto.md
+    - 3.2 Versionhallinta ja dokumentointi: versionhallinta-ja-dokumentointi.md
+    - 4 Data ja tietolähteet: data-ja-tietolahteet.md
+    - 4.1 Datan lähteet: datan-lahteet.md
+    - 4.2 Datan käsittely ja säilytys: datan-kasittely-ja-sailytys.md
+    - 4.3 Rajapintojen käyttö ja autentikointi: rajapintojen-kaytto-ja-autentikointi.md
+    - 4.4 Tietoturva ja tietosuoja: tietoturva-ja-tietosuoja.md
+    - 5 Arkkitehtuuri: arkkitehtuuri.md
+    - 5.1 Mikropalveluarkkitehtuurin yleiskuva: mikropalveluarkkitehtuuri.md
+    - 5.2 Palveluiden roolit ja riippuvuudet: palveluiden-roolit-ja-riippuvuudet.md
+    - 5.3 Järjestelmän rakennekaavio: jarjestelman-rakennekaavio.md
+    - 5.4 Työnkulku ja tietovirrat: tyonkulku-ja-tietovirrat.md
+    - 7 Vaatimusmäärittely: vaatimusmaarittely.md
+    - 7.1 Käyttötapaukset ja käyttäjätarinat: kayttotapaukset-ja-kayttajatarinat.md
+    - 7.4 Ei-toiminnalliset vaatimukset: ei-toiminnalliset-vaatimukset.md
+    - 7.2 Käyttötapauskaavio: kayttotapauskaavio.md
+    - 8 Rajapintakuvaus: rajapintakuvaus.md
+    - 8.1 API-rakenne ja endpointit: api-rakenne-ja-endpointit.md
+    - Yhteenveto: yhteenveto.md
+    - 8.2 Datan syötteet ja palautteet: datan-syotteet-ja-palautteet.md
+    - 8.3 Rajapintojen dokumentointi: rajapintojen-dokumentointi.md
+    - 8.4 Integraatiot ulkoisiin palveluihin: integraatiot-ulkoisiin-palveluihin.md
+  - Testaus- ja hyväksyntä:
+    - 9 Testaussuunnitelma: testaussuunnitelma.md
+    - 9.1 Testauksen tavoitteet ja periaatteet: testauksen-tavoitteet-ja-periaatteet.md
+    - Testauksen kohde: testauksen-kohde.md
+    - 9.2 Testausympäristö ja -työkalut: testausymparisto-ja-tyokalut.md
+    - Testausmenetelmät: testausmenetelmat.md
+    - 9.3 Testitapaukset ja hyväksymiskriteerit: testitapaukset-ja-hyvaksymiskriteerit.md
+    - Hyväksymiskriteerit: hyvaksymiskriteerit.md
+    - Riskit ja varautuminen: riskit-ja-varautuminen.md
+    - 9.4 Automaattinen testaus ja laadunvalvonta: automaattinen-testaus-ja-laadunvalvonta.md
+    - 10 Hyväksymiskriteerit: hyvaksymiskriteerit-10.md
+    - 10.1 Laadunvarmistus: laadunvarmistus.md
+    - 10.2 Tekninen toteutus: tekninen-toteutus.md
+    - 10.3 Dokumentointi ja jäljitettävyys: dokumentointi-ja-jaljitettavyys.md
+    - 10.4 Ryhmän osallistuminen: ryhman-osallistuminen.md
+    - 11 Riskit ja niiden hallinta: riskit-ja-niiden-hallinta.md
+    - 11.1 Tunnistetut riskit: tunnistetut-riskit.md
+    - 11.2 Riskien vaikutus ja todennäköisyys: riskien-vaikutus-ja-todennakoisyys.md
+    - 11.3 Ennaltaehkäisy ja varautuminen: ennaltaehkaisy-ja-varautuminen.md
+  - Projektinhallinta:
+    - 12 Projektinhallinta: projektinhallinta.md
+    - 12.1 Scrum-menetelmän käyttö: scrum-menetelman-kaytto.md
+    - 12.2 Sprinttien seuranta ja katselmointi: sprinttien-seuranta-ja-katselmointi.md
+    - 12.3 Palaverikäytännöt ja dokumentointi: palaverikaytannot-ja-dokumentointi.md
+    - 12.4 Projektiprosessin arviointi: projektiprosessin-arviointi.md
+    - 13 Versiohallinta ja kehityskäytännöt: versiohallinta-ja-kehityskaytannot.md
+    - 13.1 GitLabin käyttö ja branch-strategia: gitlabin-kaytto-ja-branch-strategia.md
+    - 13.2 Commit- ja merge-käytännöt: commit-ja-merge-kaytannot.md
+    - 13.3 Koodin laadunvalvonta ja tarkistus: koodin-laadunvalvonta-ja-tarkistus.md
+    - 14 Tietoturva ja eettisyys: tietoturva-ja-eettisyys.md
+    - 15 Projektin päättäminen: projektin-paattaminen.md
+    - 15.1 Valmiin määritelmä: valmiin-maaritelma.md
+  - Muu kirjallinen osuus:
+    - 15.2 Palautus ja dokumentointi: palautus-ja-dokumentointi.md
+    - 15.3 Loppudemo ja itsearviointi: loppudemo-ja-itsearviointi.md
+    - 15.4 Retrospektiivi ja jatkokehitysehdotukset: retrospektiivi-ja-jatkokehitysehdotukset.md
+    - 16 Oppimispäiväkirja (Jokaisen oma): oppimispaivakirja.md
+    - 17 Palaverit: palaverit.md
+    - 4.11 Palaveri: palaveri-4-11.md
+    - 8.11 Palaveri: palaveri-8-11.md
+    - 11.11 Daily: daily-11-11.md
+    - 17 Lähteet: lahteet.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.tasklist
+  - attr_list
+  - md_in_html
