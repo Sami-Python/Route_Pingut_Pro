@@ -1,3 +1,3 @@
 # Arkkitehtuuri
 
-Sisältö tulossa.
+![alt text](./img/arkkitehtuuri.png)
