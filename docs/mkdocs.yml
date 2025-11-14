@@ -18,6 +18,8 @@ theme:
     - search.highlight
     - search.suggest
 
+docs_dir: .
+
 nav:
   - Aloitussivu: 
       - Projekti 4 Mikropalvelu - Pingut: index.md
