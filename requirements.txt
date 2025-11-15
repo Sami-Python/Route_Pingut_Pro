@@ -1,0 +1,7 @@
+icalevents
+icalendar
+streamlit
+streamlit-calendar
+fastapi
+uvicorn
+requests
