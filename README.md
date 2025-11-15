@@ -41,6 +41,16 @@ Dokumentoinnissa ja raportoinnissa pyritään riittävän hyvään - ei lähdet�
 
 ![arkkitehtuuri](./img/arkkitehtuuri.png)
 
+## Kalenteri API demo
+
+HUOM! MkDocs kontti ei toimi tässä haarassa
+
+### Docker
+
+```docker compose up --build -d```
+
+Kaksi konttia käynnistyy. Toisessa fastapi toteutus (localhost:8000) ja toisessa streamlit (localhost:8501)
+
 
 ## MkDocs + Nginx (Docker) lyhyet käyttöohjeet
 
