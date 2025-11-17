@@ -1,5 +1,16 @@
 # Here_API
 
+.venv
+```
+source .venv/Scripts/activate
+```
+
+Streamlit
+```
+streamlit run app.py --server.port 8502
+```
+
+### Docker tulossa
 
 
 ## Getting started
