@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+
+# VSCode
+.vscode/
+
+# Docker
+*.db
+*.sqlite3
+
+# Docs
+*.md~
+
+# Misc
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
