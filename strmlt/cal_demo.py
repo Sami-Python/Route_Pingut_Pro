@@ -18,8 +18,10 @@ st.title("Hello world")
 
 url = st.text_input("ical url")
 
+st.write("Testi")
+
 while st.button("get events", key="get_events"):
-    response = requests.get(f"http://localhost:8000/events?url={url}")
+    response = requests.get(f"http://api:8000/events?url={url}")
     events = json.loads(response.text)
 
     st.write(events)
