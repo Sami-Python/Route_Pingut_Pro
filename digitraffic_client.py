@@ -1,890 +1,134 @@
+# digitraffic_client.py
 import requests
+from typing import List, Tuple, Optional, Dict, Any
 
-def calculate_bbox(route_coords):
+# -------------------------
+# APU: BBox reitin ympärille
+# -------------------------
+
+def calculate_bbox(route_coords: List[Tuple[float, float]], buffer: float = 0.05) -> Optional[str]:
     """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
+    Laskee reittipisteiden ympärille Bounding Boxin (BBox).
+    Palauttaa stringin: "minLon,minLat,maxLon,maxLat".
+    HUOM: Digitrafficin liikennetiedote-API ei tue bbox-parametria suoraan,
+    mutta tätä voi käyttää jatkokehityksessä esim. oman filtteröinnin tukena.
     """
     if not route_coords:
         return None
 
-    # Erotellaan lat ja lon omiin listoihinsa
     lats = [p[0] for p in route_coords]
     lons = [p[1] for p in route_coords]
 
     min_lat, max_lat = min(lats), max(lats)
     min_lon, max_lon = min(lons), max(lons)
 
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
     bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
     return bbox
 
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
+# --------------------------------------
+# DIGITRAFFIC: Liikennetiedote-API (v1)
+# --------------------------------------
 
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
+def fetch_digitraffic_messages() -> Dict[str, Any]:
+    """
+    Hakee Digitrafficin liikennetiedotteet (Simple JSON API / v1).
+    Palauttaa:
+        {
+            "status": "SUCCESS" | "FAILED" | "EXCEPTION",
+            "data": ... (raaka JSON),
+            "count": int
         }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
     """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
+    base_url = "https://tie.digitraffic.fi/api/traffic-message/v1/messages"
 
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
+    params = {
+        "inactiveHours": 0,
+        "includeAreaGeometry": "false",
+        "situationType": "TRAFFIC_ANNOUNCEMENT"
+    }
 
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
+    headers = {
+        "User-Agent": "StreamlitTrafficApp/1.0",
+        "Accept-Encoding": "gzip",
+        "Digitraffic-User": "oma.email@esimerkki.fi"  # vaihda omaksesi
+    }
 
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
     try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
+        resp = requests.get(base_url, params=params, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            "status": "SUCCESS",
+            "data": data,
+            "count": len(data.get("features", []))
         }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
+    except requests.HTTPError:
+        return {
+            "status": "FAILED",
+            "code": resp.status_code,
+            "error": resp.text
         }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
     except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
+        return {
+            "status": "EXCEPTION",
+            "error": str(e)
         }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
 
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
+# --------------------------------------
+# APUMUUNNOS: API -> yksinkertainen lista
+# --------------------------------------
+
+def traffic_messages_near_route(coords: List[Tuple[float, float]]) -> List[Dict[str, str]]:
+    """
+    Hakee Digitraffic-liikennetiedotteet ja palauttaa yksinkertaistetun listan,
+    jonka rakenteen Streamlit-appisi voi näyttää (otsikko, sijainti, kuvaus, aika).
+    Tässä vaiheessa emme vielä oikeasti "rajaa reitin ympärille", vaan palautamme
+    kaikki aktiivit ilmoitukset – jatkokehityksessä voit käyttää BBoxia/filtteröintiä.
+    """
+    if not coords:
         return []
 
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
+    result = fetch_digitraffic_messages()
+
+    if result.get("status") != "SUCCESS":
+        # Voit halutessasi logittaa result["error"]
         return []
 
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
+    features = result["data"].get("features", [])
+    simplified: List[Dict[str, str]] = []
 
-def calculate_bbox(route_coords):
+    for feat in features:
+        props = feat.get("properties", {})
+        announcements = props.get("announcements") or []
+        # Otetaan ensimmäinen ilmoitus, jos olemassa
+        title = ""
+        description = ""
+        if announcements:
+            first = announcements[0]
+            title = first.get("title", "")
+            description = first.get("description", "")
+
+        situation_type = props.get("situationType", "Tuntematon")
+        # Esim. "Helsinki, Teollisuuskatu" löytyy usein title/descriptionista
+        location = props.get("roadAddress", "") or title
+
+        simplified.append({
+            "otsikko": title or "Liikennetiedote",
+            "sijainti": location or "Tuntematon sijainti",
+            "kuvaus": description or situation_type,
+            "aika": props.get("creationTime", "Tuntematon aika")
+        })
+
+    return simplified
+
+
+def tms_near_route(coords: List[Tuple[float, float]]) -> List[str]:
     """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
+    Placeholder TMS (sääasemat) -tieto.
+    Oikeassa toteutuksessa tänne tulisi kutsu TMS-rajapintaan ja filtteri BBoxin avulla.
     """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
+    if not coords:
         return []
 
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
-import requests
-
-def calculate_bbox(route_coords):
-    """
-    Laskee reittipisteiden ympärille laatikon (Bounding Box).
-    route_coords: lista tupleja [(lat, lon), (lat, lon), ...]
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat"
-    """
-    if not route_coords:
-        return None
-
-    # Erotellaan lat ja lon omiin listoihinsa
-    lats = [p[0] for p in route_coords]
-    lons = [p[1] for p in route_coords]
-
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
-
-    # Lisätään pieni puskuri (buffer), jotta reitti ei leikkaudu aivan reunasta
-    buffer = 0.05 # n. 5-10 km
-    
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
-
-def traffic_messages_near_route(route_coords):
-    """
-    Hakee liikennehäiriöt reitin rajaamalta alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    url = f"https://tie.digitraffic.fi/api/traffic-message/v1/messages?bbox={bbox}"
-    
-    try:
-        # Lisätään headerit kuten Fintraffic toivoo
-        headers = { 
-            "User-Agent": "StreamlitTrafficApp/1.0 (oma.sahkoposti@example.com)",
-            "Accept-Encoding": "gzip"
-        }
-        
-        resp = requests.get(url, headers=headers)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            features = data.get("features", [])
-            
-            messages = []
-            for feat in features:
-                props = feat.get("properties", {})
-                announcements = props.get("announcements", [])
-                
-                if announcements:
-                    # Otetaan talteen tärkeimmät tiedot
-                    info = {
-                        "otsikko": announcements[0].get("title", "Ei otsikkoa"),
-                        "kuvaus": announcements[0].get("features", [{}])[0].get("name", ""),
-                        "sijainti": announcements[0].get("location", {}).get("description", ""),
-                        "aika": announcements[0].get("location", {}).get("beginning", "")
-                    }
-                    messages.append(info)
-            
-            return messages
-        else:
-            print(f"Digitraffic virhe: {resp.status_code}")
-            return []
-
-    except Exception as e:
-        print(f"Virhe Digitraffic-haussa: {e}")
-        return []
-
-def tms_near_route(route_coords):
-    """
-    Hakee sää- ja kelitiedot (Road Weather Stations) reitin alueelta.
-    """
-    bbox = calculate_bbox(route_coords)
-    if not bbox:
-        return []
-
-    # Huom: Sääasemille käytetään eri endpointia
-    url = "https://tie.digitraffic.fi/api/v3/data/road-weather-stations"
-    # Digitrafficin v3 sää-API ei tue suoraan bboxia URL-parametrina samalla tavalla,
-    # joten tässä haetaan kaikki ja suodatetaan (tai käytetään metadata-hakua).
-    # Yksinkertaisuuden vuoksi tässä esimerkissä palautetaan tyhjä lista tai 
-    # voidaan toteuttaa hakemalla kaikki ja suodattamalla koordinaattien mukaan.
-    
-    # Oikea tapa olisi hakea ensin asemat (metadata) bboxilla, jos API tukee, 
-    # mutta pidetään tämä yksinkertaisena ja palautetaan placeholder-tieto.
-    return ["Säädata vaatii tarkemman asemasuodatuksen (To do)"]
+    # TODO: toteuta oikea TMS-kutsu (tie.digitraffic.fi/api/tms-stations...) BBoxilla
+    return ["Digitrafficin TMS (sääasema) tiedon haku vaatii erillisen TMS-API-kutsun."]
