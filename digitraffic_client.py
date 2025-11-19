@@ -50,7 +50,7 @@ def fetch_digitraffic_messages() -> Dict[str, Any]:
     headers = {
         "User-Agent": "StreamlitTrafficApp/1.0",
         "Accept-Encoding": "gzip",
-        "Digitraffic-User": "oma.email@esimerkki.fi"  # vaihda omaksesi
+        "Digitraffic-User": "samihiedanpaa@kamk.fi" 
     }
 
     try:
