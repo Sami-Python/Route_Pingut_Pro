@@ -13,7 +13,7 @@ __pycache__/
 *.sqlite3
 
 # Docs
-*.md~
+
 
 # Misc
 .DS_Store
