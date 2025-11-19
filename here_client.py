@@ -1,9 +1,18 @@
 import requests
+import os
+from dotenv import load_dotenv
 from typing import Tuple, List, Optional, Dict, Any
 import flexpolyline
 
-# HUOM: API-AVAIN TÄYTYY MÄÄRITELLÄ TAI TUODA ERILLISESTI
-HERE_API_KEY = "OQFZ4YGejiwxEtYlxNyHqgebBUb4vdmuER3qYcAzx5A"
+# 1. Ladataan ympäristömuuttujat .env-tiedostosta
+load_dotenv()
+
+# 2. Haetaan avain .env-tiedostosta
+HERE_API_KEY = os.getenv("HERE_API_KEY")
+
+# Varmistus
+if not HERE_API_KEY:
+    print("VAROITUS: HERE_API_KEY puuttuu .env-tiedostosta!")
 
 # --------------------------------------------------------------------
 # 1. HERE API - FUNKTIOT
@@ -11,9 +20,14 @@ HERE_API_KEY = "OQFZ4YGejiwxEtYlxNyHqgebBUb4vdmuER3qYcAzx5A"
 
 def geocode(address: str) -> Optional[Tuple[float, float]]:
     """Muuttaa osoitteen koordinaateiksi (lat, lon)."""
-    url = f"https://geocode.search.hereapi.com/v1/geocode?q={address}&limit=1&apiKey={HERE_API_KEY}"
+    url = "https://geocode.search.hereapi.com/v1/geocode"
+    params = {
+        "q": address,
+        "limit": 1,
+        "apiKey": HERE_API_KEY
+    }
     try:
-        resp = requests.get(url)
+        resp = requests.get(url, params=params)
         if resp.status_code == 200:
             data = resp.json()
             items = data.get("items", [])
@@ -26,20 +40,29 @@ def geocode(address: str) -> Optional[Tuple[float, float]]:
         print(f"DEBUG: Geocode exception: {e}")
     return None
 
-def route(origin: Tuple[float, float], destination: Tuple[float, float]) -> Optional[Dict[str, Any]]:
+def route(origin: Tuple[float, float], destination: Tuple[float, float], departure_time: str = None) -> Optional[Dict[str, Any]]:
     """
-    Hakee reitin, palauttaa liikennetiedot (incidents) JA span-indeksit.
+    Hakee reitin.
+    HUOM: Palautettu 'spans', jotta saamme sijainnin häiriöille, joilta puuttuu geometry.
     """
-    url = (
-        f"https://router.hereapi.com/v8/routes?transportMode=car"
-        f"&origin={origin[0]},{origin[1]}"
-        f"&destination={destination[0]},{destination[1]}"
-        f"&return=polyline,summary,incidents"
-        f"&spans=incidents"
-        f"&apiKey={HERE_API_KEY}"
-    )
+    url = "https://router.hereapi.com/v8/routes"
+    
+    params = {
+        "transportMode": "car",
+        "origin": f"{origin[0]},{origin[1]}",
+        "destination": f"{destination[0]},{destination[1]}",
+        # TÄRKEÄÄ: 'spans' on mukana, jotta voimme linkittää häiriöt reittipisteisiin
+        "return": "polyline,summary,incidents", 
+        "spans": "incidents", 
+        "apiKey": HERE_API_KEY
+    }
+
+    # Jos lähtöaika on annettu, lisätään se pyyntöön
+    if departure_time:
+        params["departureTime"] = departure_time
+
     try:
-        resp = requests.get(url)
+        resp = requests.get(url, params=params)
         if resp.status_code == 200:
             return resp.json()
         else:
@@ -49,73 +72,69 @@ def route(origin: Tuple[float, float], destination: Tuple[float, float]) -> Opti
 
 def parse_traffic_incidents(route_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Parsii liikennetiedotteet käyttämällä span-indeksiä viittaamaan 
-    varsinaiseen incidents-listaan.
+    Parsii häiriöt yhdistämällä reittiviivan (polyline) ja spans-tiedot.
+    Tämä takaa, että saamme koordinaatit myös häiriöille, joissa API ei niitä suoraan kerro.
     """
     incidents_list = []
-    seen_incident_ids = set()
     
-    if route_data and "routes" in route_data and route_data["routes"]:
-        for route_obj in route_data["routes"]:
-            for section in route_obj.get("sections", []):
+    if not route_data or "routes" not in route_data:
+        return []
+
+    for route_obj in route_data["routes"]:
+        for section in route_obj.get("sections", []):
+            
+            # 1. Puretaan tämän sectionin reittiviiva koordinaateiksi
+            # Tarvitaan flexpolyline-kirjasto
+            poly_str = section.get("polyline")
+            if not poly_str:
+                continue
+            
+            # decoded_coords on lista [(lat, lon), (lat, lon), ...]
+            decoded_coords = flexpolyline.decode(poly_str)
+            
+            # 2. Haetaan häiriöiden määritelmät (lista, johon spans viittaa indekseillä)
+            incident_defs = section.get("incidents", [])
+            
+            # 3. Käydään läpi SPANS, joka kertoo missä kohtaa viivaa häiriö on
+            for span in section.get("spans", []):
                 
-                # 1. HAE KAIKKI TAPAHTUMAT (FULL DEFINITIONS)
-                incident_definitions = section.get("incidents", [])
-
-                # 2. ITEROI SPANS-RAKENNE LÄPI
-                for span in section.get("spans", []):
-                    span_incident_indices = span.get("incidents", []) # Tässä on lista indeksejä, esim. [0]
+                # 'offset' kertoo monesko piste reittiviivalla (indeksi)
+                offset = span.get("offset", 0)
+                
+                # 'incidents' on lista indeksejä, jotka viittaavat incident_defs -listaan
+                span_inc_indices = span.get("incidents", [])
+                
+                # Varmistetaan että offset on järkevä
+                if span_inc_indices and offset < len(decoded_coords):
                     
-                    if span_incident_indices and incident_definitions:
-                        
-                        start_index = span.get("offset", 0)
-                        length = span.get("length", 0)
-                        end_index = start_index + length
-                        
-                        for incident_index in span_incident_indices:
+                    # Nyt tiedämme tarkan sijainnin reitillä!
+                    lat, lon = decoded_coords[offset]
+                    
+                    for inc_idx in span_inc_indices:
+                        # Varmistetaan indeksin oikeellisuus
+                        if isinstance(inc_idx, int) and inc_idx < len(incident_defs):
+                            inc = incident_defs[inc_idx]
                             
-                            # TÄMÄ ON KORJAUS: Noudetaan varsinainen incident-sanakirja indeksillä
-                            if isinstance(incident_index, int) and incident_index < len(incident_definitions):
-                                incident = incident_definitions[incident_index]
-                            else:
-                                continue # Ohitetaan, jos indeksi on virheellinen
+                            # Luetaan tiedot turvallisesti
+                            description = "Ei kuvausta"
+                            if "description" in inc:
+                                val = inc["description"]
+                                # Joskus description on objekti {text: "foo"}, joskus string
+                                description = val.get("text", val) if isinstance(val, dict) else str(val)
 
-                            # Varmistetaan uniikki ID
-                            incident_id = incident.get("id")
-                            # Emme enää estä ID:n toistoa, koska sama ID voi liittyä useampaan spaniin,
-                            # mutta pidämme parsintalogiikan turvallisena.
+                            itype = inc.get("type", "INCIDENT")
+                            criticality = inc.get("criticality", "minor")
 
-                            location_data = incident.get("location", {})
-                            
-                            lat = location_data.get("point", {}).get("lat") or location_data.get("startPoint", {}).get("lat")
-                            lon = location_data.get("point", {}).get("lng") or location_data.get("startPoint", {}).get("lng")
-                            
-                            description_text = location_data.get("description", "Tuntematon sijainti")
-
-                            # Fallback sijainti- ja vaikutustiedolle
-                            if description_text == "Tuntematon sijainti":
-                                road_names = location_data.get("roadNames", [])
-                                if road_names:
-                                    description_text = f"Tie: {', '.join(road_names)}"
-                            if description_text == "Tuntematon sijainti" and lat and lon:
-                                description_text = f"Koordinaatit: {lat:.4f}, {lon:.4f}"
-
-                            impact = incident.get("trafficFlowImpact")
-                            if not impact: impact = incident.get("criticality", "Tuntematon")
-                            
-                            # Lisätään tiedote listaan
+                            # Lisätään listaan
                             incidents_list.append({
-                                "tyyppi": incident.get("type", "Ei tyyppiä"),
-                                "kuvaus": incident.get("description", "Ei kuvausta"),
-                                "paikka": description_text, 
-                                "taso": impact,
-                                "lat": lat, 
-                                "lon": lon, 
-                                "start_index": start_index,
-                                "end_index": end_index,
-                                "tieto": incident 
+                                "tyyppi": itype,
+                                "kuvaus": description,
+                                "taso": criticality,
+                                "lat": float(lat),
+                                "lon": float(lon),
+                                "paikka": f"Reittipiste: {offset}" # Debug-tieto
                             })
-                            
+
     return incidents_list
 
 def traffic_messages_near_route(coords: List[Tuple[float, float]]) -> List[Dict[str, str]]:
@@ -144,9 +163,7 @@ def slice_polyline(polyline_coords: List[Tuple[float, float]], start_index: int,
     end_index = int(end_index)
 
     max_index = len(polyline_coords)
-    
     end_slice = min(end_index, max_index)
-    
     start_slice = max(0, min(start_index, end_slice))
 
     return polyline_coords[start_slice:end_slice]
