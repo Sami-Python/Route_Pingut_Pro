@@ -37,7 +37,7 @@ async def get_calendar_events(url: str):
             "title": str(event.get('SUMMARY')),
             "start": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
             "end": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
-            "description": str(event.get('DESCRIPTION', ''))
+            "location": str(event.get('LOCATION', '')),
         }
         calendar_events.append(tmp)
     
