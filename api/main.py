@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 import os
 from graph_api import app as graph_app
-from cal_api import app as cal_app
+from ical_api import app as ical_app
 from logger import setup_logging
 
 # Initialize logging (captures prints and writes to api.log)
@@ -14,7 +14,7 @@ app = FastAPI()
 # You can access the graph API at /graph/...
 # You can access the calendar API at /cal/...
 app.mount("/graph", graph_app)
-app.mount("/cal", cal_app)
+app.mount("/ical", ical_app)
 
 @app.get("/")
 async def root():
@@ -22,7 +22,7 @@ async def root():
         "message": "Main API Gateway",
         "routes": {
             "graph_api": "/graph",
-            "cal_api": "/cal",
+            "ical_api": "/ical",
             "logs": "/logs"
         }
     }

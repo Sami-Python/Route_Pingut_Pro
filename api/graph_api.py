@@ -56,7 +56,7 @@ def _get_token_from_code(code: str, redirect_uri: str):
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Outlook Calendar API Prototype. Go to /login to start."}
+    return {"message": "Welcome to the Outlook Calendar API. Go to /login to start."}
 
 @app.get("/login")
 async def login(request: Request):
@@ -91,8 +91,8 @@ async def callback(request: Request, code: str):
     
     return RedirectResponse(url=redirect_url)
 
-@app.get("/calendar")
-async def get_calendar(token: str):
+@app.get("/events")
+async def get_events(token: str):
     if not token:
         raise HTTPException(status_code=401, detail="Missing access token")
     

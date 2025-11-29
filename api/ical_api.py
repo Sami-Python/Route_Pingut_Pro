@@ -6,6 +6,10 @@ from typing import Optional
 
 app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"message": "Welcome to the iCal Calendar API. Go to /events to start or continue exploring with /docs."}
+
 @app.get("/events")
 async def get_calendar_events(url: str):
     downloader = ICalDownload()
