@@ -3,7 +3,10 @@ import requests
 import json
 from streamlit_calendar import calendar
 
-def _get_available_calendars():
+def _get_available_calendars(): 
+    """
+    Get the available calendars.
+    """
     cals = []
     if "outlook_events_data" in st.session_state:
         cals.append("Outlook")
