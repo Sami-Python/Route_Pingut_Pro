@@ -71,7 +71,7 @@ with st.expander("iCal API Demo", expanded=False):
     if st.button("Get Events", key="get_ical_events"):
         try:
             # Note: We now use the /cal prefix because of the mount in api/main.py
-            response = requests.get(f"{API_BASE_URL}/cal/events", params={"url": url})
+            response = requests.get(f"{API_BASE_URL}/ical/events", params={"url": url})
             if response.status_code == 200:
                 events_data = response.json()
                 st.success(f"Found {len(events_data)} events")
