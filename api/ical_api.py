@@ -4,14 +4,23 @@ import icalendar
 import pytz
 from typing import Optional
 
+# Initialize FastAPI app
 app = FastAPI()
 
 @app.get("/")
 async def root():
+    """
+    Root endpoint for the iCal Calendar API.
+    """
     return {"message": "Welcome to the iCal Calendar API. Go to /events to start or continue exploring with /docs."}
 
 @app.get("/events")
 async def get_calendar_events(url: str):
+    """
+    Get events from an iCal calendar
+    Returns a list of events as a list of dictionaries. 
+    Each dictionary contains the event title, start time, end time, and location.
+    """
     downloader = ICalDownload()
     try:
         data = downloader.data_from_url(url)

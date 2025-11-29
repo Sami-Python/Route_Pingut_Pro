@@ -18,6 +18,9 @@ app.mount("/ical", ical_app)
 
 @app.get("/")
 async def root():
+    """
+    Root endpoint for the main API Gateway.
+    """
     return {
         "message": "Main API Gateway",
         "routes": {
@@ -29,6 +32,9 @@ async def root():
 
 @app.get("/logs")
 async def get_logs():
+    """
+    Get the log file.
+    """
     log_file = "api.log"
     if os.path.exists(log_file):
         return FileResponse(log_file, media_type="text/plain")

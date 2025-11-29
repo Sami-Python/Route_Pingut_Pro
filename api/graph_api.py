@@ -9,7 +9,7 @@ import utils
 
 # Load environment variables
 load_dotenv()
-
+# Initialize FastAPI app
 app = FastAPI()
 
 # Configuration
@@ -17,13 +17,14 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 AUTHORITY = os.getenv("AUTHORITY", "https://login.microsoftonline.com/consumers")
 REDIRECT_PATH = os.getenv("REDIRECT_PATH", "/callback")
-# We'll construct the full redirect URI dynamically or you can set it explicitly
-# For localhost testing, it's usually http://localhost:8000/callback
-
+# Configuration for the Microsoft Graph API
 SCOPE = ["User.Read", "Calendars.Read"]
 
 # Build the MSAL app with the client ID, authority, and client secret   
 def _build_msal_app(cache=None, authority=None):
+    """
+    Build the MSAL app with the client ID, authority, and client secret
+    """
     return msal.ConfidentialClientApplication(
         CLIENT_ID,
         authority=authority or AUTHORITY,
@@ -33,6 +34,9 @@ def _build_msal_app(cache=None, authority=None):
 
 # Get the authorization URL for the user to login
 def _get_auth_url(redirect_uri: str):
+    """
+    Get the authorization URL for the user to login
+    """
     print(f"Using Redirect URI: {redirect_uri}")
     print(f"SCOPE: {SCOPE}")
     msal_app = _build_msal_app()
@@ -45,6 +49,9 @@ def _get_auth_url(redirect_uri: str):
 
 # Get the access token from the authorization code
 def _get_token_from_code(code: str, redirect_uri: str):
+    """
+    Get the access token from the authorization code
+    """
     msal_app = _build_msal_app()
     result = msal_app.acquire_token_by_authorization_code(
         code,
@@ -60,6 +67,9 @@ async def root():
 
 @app.get("/login")
 async def login(request: Request):
+    """
+    Login endpoint for the authorization code flow.
+    """
     # Construct the redirect URI based on the request's base URL
     # This handles http vs https and port numbers automatically
     if "http" in REDIRECT_PATH:
@@ -67,15 +77,16 @@ async def login(request: Request):
     else:
          redirect_uri = str(request.url_for("callback"))
     print(f"Using Redirect URI: {redirect_uri}")
-    # If running behind a proxy (like ngrok or docker), you might need to force https or specific host
-    # For now, we trust the request.url_for
-    
+    # If running behind a proxy (like ngrok or docker), you need to force https or specific host
     auth_url = _get_auth_url(redirect_uri)
     print(auth_url)
     return RedirectResponse(auth_url)
 
 @app.get("/callback")
 async def callback(request: Request, code: str):
+    """
+    Callback endpoint for the authorization code flow.
+    """
     if "http" in REDIRECT_PATH:
          redirect_uri = REDIRECT_PATH
     else:
@@ -93,6 +104,11 @@ async def callback(request: Request, code: str):
 
 @app.get("/events")
 async def get_events(token: str):
+    """
+    Get events from an Outlook calendar
+    Returns a list of events as a list of dictionaries. 
+    Each dictionary contains the event title, start time, end time, and location.
+    """
     if not token:
         raise HTTPException(status_code=401, detail="Missing access token")
     

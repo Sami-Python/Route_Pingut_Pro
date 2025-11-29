@@ -26,6 +26,9 @@ class PrintLogger:
         self.original_stream.flush()
 
 def setup_logging(log_file="api.log"):
+    """
+    Setup logging to write to a file and capture print() statements.
+    """
     # 1. Configure the root logger to write to a file
     logging.basicConfig(
         level=logging.INFO,
@@ -36,6 +39,5 @@ def setup_logging(log_file="api.log"):
     )
 
     # 2. Redirect sys.stdout and sys.stderr to capture print() statements
-    # We use the root logger or specific loggers for this
     sys.stdout = PrintLogger(logging.getLogger("STDOUT"), logging.INFO, sys.__stdout__)
     sys.stderr = PrintLogger(logging.getLogger("STDERR"), logging.ERROR, sys.__stderr__)
