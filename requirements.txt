@@ -1,0 +1,9 @@
+icalevents
+icalendar
+streamlit
+streamlit-calendar
+fastapi
+uvicorn
+requests
+msal
+python-dotenv

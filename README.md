@@ -41,6 +41,31 @@ Dokumentoinnissa ja raportoinnissa pyritään riittävän hyvään - ei lähdet�
 
 ![arkkitehtuuri](./img/arkkitehtuuri.png)
 
+## Kalenteri API demo
+
+HUOM! MkDocs kontti ei toimi tässä haarassa
+
+### Docker
+
+```docker compose up --build -d```
+
+Kaksi konttia käynnistyy. Toisessa fastapi toteutus (localhost:8000) ja toisessa streamlit (localhost:8501)
+
+### FastAPI
+
+FastAPI:n dokumentaatioon pääset käsiksi: http://localhost:8000/docs
+
+### Streamlit
+
+Streamlit ympäristöön pääset käsiksi: http://localhost:8501
+
+### Kalenteri
+
+Voit kokeilla oman lukkarin tiedoston hakua tai käyttää tätä linkkiä esimerkkinä: 
+https://lukkarit.kamk.fi/ical.php?hash=E74AC94AE7A19AC99110C39EE535C0DBB0DF8AAE
+
+
+
 
 ## MkDocs + Nginx (Docker) lyhyet käyttöohjeet
 
