@@ -1,134 +1,110 @@
-# digitraffic_client.py
 import requests
 from typing import List, Tuple, Optional, Dict, Any
 
-# -------------------------
-# APU: BBox reitin ympärille
-# -------------------------
+# --------------------------------------------------------------------
+# 1. APUFUNKTIOT
+# --------------------------------------------------------------------
 
-def calculate_bbox(route_coords: List[Tuple[float, float]], buffer: float = 0.05) -> Optional[str]:
-    """
-    Laskee reittipisteiden ympärille Bounding Boxin (BBox).
-    Palauttaa stringin: "minLon,minLat,maxLon,maxLat".
-    HUOM: Digitrafficin liikennetiedote-API ei tue bbox-parametria suoraan,
-    mutta tätä voi käyttää jatkokehityksessä esim. oman filtteröinnin tukena.
-    """
-    if not route_coords:
-        return None
-
+def get_bounds(route_coords: List[Tuple[float, float]], margin: float = 0.1) -> Optional[Tuple[float, float, float, float]]:
+    if not route_coords: return None
     lats = [p[0] for p in route_coords]
     lons = [p[1] for p in route_coords]
+    return (min(lats) - margin, min(lons) - margin, max(lats) + margin, max(lons) + margin)
 
-    min_lat, max_lat = min(lats), max(lats)
-    min_lon, max_lon = min(lons), max(lons)
+def calculate_bbox(route_coords: List[Tuple[float, float]]) -> Optional[str]:
+    bounds = get_bounds(route_coords, margin=0.05)
+    if not bounds: return None
+    return f"{bounds[1]},{bounds[0]},{bounds[3]},{bounds[2]}"
 
-    bbox = f"{min_lon - buffer},{min_lat - buffer},{max_lon + buffer},{max_lat + buffer}"
-    return bbox
+def extract_single_coordinate(geometry: Dict[str, Any]) -> Tuple[float, float]:
+    coords = geometry.get("coordinates", [])
+    if not coords: return 0.0, 0.0
+    try:
+        if isinstance(coords[0], (float, int)): return float(coords[1]), float(coords[0])
+        if isinstance(coords[0], list) and isinstance(coords[0][0], (float, int)): return float(coords[0][1]), float(coords[0][0])
+    except: pass
+    return 0.0, 0.0
 
-# --------------------------------------
-# DIGITRAFFIC: Liikennetiedote-API (v1)
-# --------------------------------------
+# --------------------------------------------------------------------
+# 2. LIIKENNETIEDOTTEET
+# --------------------------------------------------------------------
 
-def fetch_digitraffic_messages() -> Dict[str, Any]:
-    """
-    Hakee Digitrafficin liikennetiedotteet (Simple JSON API / v1).
-    Palauttaa:
-        {
-            "status": "SUCCESS" | "FAILED" | "EXCEPTION",
-            "data": ... (raaka JSON),
-            "count": int
-        }
-    """
-    base_url = "https://tie.digitraffic.fi/api/traffic-message/v1/messages"
-
-    params = {
-        "inactiveHours": 0,
-        "includeAreaGeometry": "false",
-        "situationType": "TRAFFIC_ANNOUNCEMENT"
-    }
-
-    headers = {
-        "User-Agent": "StreamlitTrafficApp/1.0",
-        "Accept-Encoding": "gzip",
-        "Digitraffic-User": "samihiedanpaa@kamk.fi" 
-    }
+def traffic_messages_near_route(coords: List[Tuple[float, float]]) -> List[Dict[str, Any]]:
+    url = "https://tie.digitraffic.fi/api/traffic-message/v1/messages"
+    params = {"inactiveHours": 0, "situationType": "TRAFFIC_ANNOUNCEMENT", "includeAreaGeometry": "false"}
+    headers = {"User-Agent": "StreamlitApp/1.0 (gzip)"}
 
     try:
-        resp = requests.get(base_url, params=params, headers=headers, timeout=15)
+        resp = requests.get(url, params=params, headers=headers, timeout=5)
         resp.raise_for_status()
         data = resp.json()
-        return {
-            "status": "SUCCESS",
-            "data": data,
-            "count": len(data.get("features", []))
-        }
-    except requests.HTTPError:
-        return {
-            "status": "FAILED",
-            "code": resp.status_code,
-            "error": resp.text
-        }
+        messages = []
+        bounds = get_bounds(coords)
+        for feature in data.get("features", []):
+            geometry = feature.get("geometry", {})
+            props = feature.get("properties", {})
+            msg_lat, msg_lon = extract_single_coordinate(geometry)
+            if bounds and msg_lat != 0.0:
+                min_lat, min_lon, max_lat, max_lon = bounds
+                if not (min_lat <= msg_lat <= max_lat and min_lon <= msg_lon <= max_lon): continue
+            announcements = props.get("announcements", [])
+            first_ann = announcements[0] if announcements else {}
+            messages.append({
+                "otsikko": first_ann.get("title", "Liikennetiedote"),
+                "kuvaus": first_ann.get("comment", "") or first_ann.get("description", ""),
+                "sijainti": first_ann.get("location", {}).get("description", "Alue"),
+                "aika": props.get("announcementUpdateTime"),
+                "lat": msg_lat,
+                "lon": msg_lon
+            })
+        return messages
+    except: return []
+
+# --------------------------------------------------------------------
+# 3. KELIKAMERAT
+# --------------------------------------------------------------------
+
+def get_weather_cameras(route_coords: List[Tuple[float, float]]) -> List[Dict[str, Any]]:
+    url = "https://tie.digitraffic.fi/api/weathercam/v1/stations"
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)" }
+    bounds = get_bounds(route_coords, margin=0.15)
+    if not bounds: return []
+    min_lat, min_lon, max_lat, max_lon = bounds
+    cameras = []
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        for feature in data.get("features", []):
+            coords_raw = feature.get("geometry", {}).get("coordinates", [])
+            if not coords_raw or len(coords_raw) < 2: continue
+            lon, lat = float(coords_raw[0]), float(coords_raw[1])
+            
+            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+                props = feature.get("properties", {})
+                station_id = props.get("id")
+                presets = props.get("presets", [])
+                
+                # PARANNETTU URL-LOGIIKKA
+                # Oletus: asemaID + "01" (yleisin pääkamera)
+                image_url = f"https://weathercam.digitraffic.fi/{station_id}01.jpg"
+                
+                # Jos API kertoo tarkemman URLin, käytetään sitä
+                if presets:
+                    # Etsitään ID, joka sisältää "01"
+                    best_preset = next((p for p in presets if "01" in p.get("id", "")), presets[0])
+                    if "imageUrl" in best_preset:
+                        image_url = best_preset["imageUrl"]
+
+                cameras.append({
+                    "id": station_id,
+                    "name": props.get("names", {}).get("fi", "Kelikamera"),
+                    "lat": lat,
+                    "lon": lon,
+                    "imageUrl": image_url
+                })
+        return cameras
     except Exception as e:
-        return {
-            "status": "EXCEPTION",
-            "error": str(e)
-        }
-
-# --------------------------------------
-# APUMUUNNOS: API -> yksinkertainen lista
-# --------------------------------------
-
-def traffic_messages_near_route(coords: List[Tuple[float, float]]) -> List[Dict[str, str]]:
-    """
-    Hakee Digitraffic-liikennetiedotteet ja palauttaa yksinkertaistetun listan,
-    jonka rakenteen Streamlit-appisi voi näyttää (otsikko, sijainti, kuvaus, aika).
-    Tässä vaiheessa emme vielä oikeasti "rajaa reitin ympärille", vaan palautamme
-    kaikki aktiivit ilmoitukset – jatkokehityksessä voit käyttää BBoxia/filtteröintiä.
-    """
-    if not coords:
+        print(f"Camera error: {e}")
         return []
 
-    result = fetch_digitraffic_messages()
-
-    if result.get("status") != "SUCCESS":
-        # Voit halutessasi logittaa result["error"]
-        return []
-
-    features = result["data"].get("features", [])
-    simplified: List[Dict[str, str]] = []
-
-    for feat in features:
-        props = feat.get("properties", {})
-        announcements = props.get("announcements") or []
-        # Otetaan ensimmäinen ilmoitus, jos olemassa
-        title = ""
-        description = ""
-        if announcements:
-            first = announcements[0]
-            title = first.get("title", "")
-            description = first.get("description", "")
-
-        situation_type = props.get("situationType", "Tuntematon")
-        # Esim. "Helsinki, Teollisuuskatu" löytyy usein title/descriptionista
-        location = props.get("roadAddress", "") or title
-
-        simplified.append({
-            "otsikko": title or "Liikennetiedote",
-            "sijainti": location or "Tuntematon sijainti",
-            "kuvaus": description or situation_type,
-            "aika": props.get("creationTime", "Tuntematon aika")
-        })
-
-    return simplified
-
-
-def tms_near_route(coords: List[Tuple[float, float]]) -> List[str]:
-    """
-    Placeholder TMS (sääasemat) -tieto.
-    Oikeassa toteutuksessa tänne tulisi kutsu TMS-rajapintaan ja filtteri BBoxin avulla.
-    """
-    if not coords:
-        return []
-
-    # TODO: toteuta oikea TMS-kutsu (tie.digitraffic.fi/api/tms-stations...) BBoxilla
-    return ["Digitrafficin TMS (sääasema) tiedon haku vaatii erillisen TMS-API-kutsun."]
+def tms_near_route(coords): return []
