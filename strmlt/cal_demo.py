@@ -116,7 +116,7 @@ with st.expander("Graph API Demo", expanded=True):
             try:
                 # Call the API container
                 # The graph_api expects 'token' as a query parameter
-                response = requests.get(f"{API_BASE_URL}/graph/calendar", params={"token": token})
+                response = requests.get(f"{API_BASE_URL}/graph/events", params={"token": token})
                 
                 if response.status_code == 200:
                     data = response.json()
