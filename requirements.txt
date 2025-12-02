@@ -1,7 +1,9 @@
 streamlit
-folium
-streamlit-folium
 requests
 flexpolyline
-
+python-dotenv
+pydeck
 streamlit-js-eval
+fastapi
+uvicorn[standard]
+pydantic

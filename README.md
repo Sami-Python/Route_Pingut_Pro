@@ -9,6 +9,11 @@ Streamlit
 ```
 streamlit run app.py --server.port 8502
 ```
+FastAPI
+```
+.venv/Scripts/python.exe api_server.py
+```
+-> Swagger-dokumentaatio: http://localhost:8000/docs
 
 ### Docker tulossa
 

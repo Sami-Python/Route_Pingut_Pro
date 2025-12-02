@@ -20,6 +20,7 @@ pdk.settings.mapbox_api_key = MAPBOX_TOKEN
 # 2. Tuodaan funktiot
 from here_client import geocode, route, parse_traffic_incidents
 from digitraffic_client import get_weather_cameras, traffic_messages_near_route
+from weather_client import get_rainviewer_data, get_closest_timestamp
 
 # ====================================================================
 # API WRAPPERS
@@ -37,6 +38,10 @@ def get_cached_route(origin: Tuple[float, float],
 def geocode_cached(query: str):
     return geocode(query)
 
+@st.cache_data(ttl=300)
+def get_cached_weather_data():
+    return get_rainviewer_data()
+
 def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, float]]:
     try:
         section = route_data["routes"][0]["sections"][0]
@@ -49,10 +54,38 @@ def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, f
 # MAP CREATION
 # ====================================================================
 
-def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, layer_settings, map_style):
+# KORJAUS: Poistettu weather_host parametreista
+def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, layer_settings, map_style, weather_ts, weather_opacity):
     layers = []
 
-    # 1. REITTI
+    # 1. SÄÄ (TileLayer)
+    if layer_settings.get("show_weather") and weather_ts:
+        # KORJAUS:
+        # 1. Käytetään tile.cache.rainviewer.com (DNS toimii)
+        # 2. POISTETTU "/v2/radar" polusta. Cache-palvelin vaatii suoran aikaleiman.
+        tile_url = f"https://tile.cache.rainviewer.com/{weather_ts}/256/{{z}}/{{x}}/{{y}}/6/1_1.png"
+        
+        layers.append(pdk.Layer(
+            "TileLayer",
+            id="weather-layer",
+            data=tile_url,
+            opacity=weather_opacity,
+            min_zoom=0,
+            max_zoom=19,
+            tileSize=256,
+            render_sub_layers=pdk.types.Function("""
+                function(props) {
+                    var bbox = props.tile.bbox;
+                    return new deck.BitmapLayer(props, {
+                        data: null,
+                        image: props.data,
+                        bounds: [bbox.west, bbox.south, bbox.east, bbox.north]
+                    });
+                }
+            """)
+        ))
+
+    # 2. REITTI
     if layer_settings.get("show_route") and coords:
         layers.append(pdk.Layer(
             "PathLayer",
@@ -65,7 +98,7 @@ def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, 
             opacity=0.8,
         ))
 
-    # 2. KELIKAMERAT
+    # 3. KELIKAMERAT
     if layer_settings.get("show_cameras") and cameras:
         layers.append(pdk.Layer(
             "ScatterplotLayer",
@@ -82,60 +115,24 @@ def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, 
             auto_highlight=True
         ))
 
-    # 3. PISTEET
+    # 4. PISTEET
     point_data = []
     if origin_coords: point_data.append({"pos": [origin_coords[1], origin_coords[0]], "color": [0, 255, 100], "name": "Lähtö"})
     if dest_coords: point_data.append({"pos": [dest_coords[1], dest_coords[0]], "color": [255, 50, 50], "name": "Määränpää"})
     
     if point_data:
-        layers.append(pdk.Layer(
-            "ScatterplotLayer", 
-            data=point_data, 
-            id="endpoints",
-            get_position="pos", 
-            get_color="color", 
-            get_radius=800, 
-            radius_min_pixels=6, 
-            pickable=True, 
-            stroked=True, 
-            get_line_color=[255, 255, 255], 
-            line_width_min_pixels=2
-        ))
+        layers.append(pdk.Layer("ScatterplotLayer", data=point_data, id="endpoints", get_position="pos", get_color="color", get_radius=800, radius_min_pixels=6, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
-    # 4. HÄIRIÖT
+    # 5. HÄIRIÖT
     if layer_settings.get("show_incidents") and incidents:
         incident_points = [{"pos": [i['lon'], i['lat']], "color": [200, 0, 0] if 'critical' in str(i['taso']) else [255, 140, 0], "name": i['tyyppi']} for i in incidents if i.get('lat')]
         if incident_points:
-            layers.append(pdk.Layer(
-                "ScatterplotLayer", 
-                data=incident_points, 
-                id="incidents",
-                get_position="pos", 
-                get_color="color", 
-                get_radius=600, 
-                pickable=True, 
-                stroked=True, 
-                get_line_color=[255, 255, 255], 
-                line_width_min_pixels=1
-            ))
+            layers.append(pdk.Layer("ScatterplotLayer", data=incident_points, id="incidents", get_position="pos", get_color="color", get_radius=600, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=1))
 
-    # 5. AUTO
+    # 6. AUTO
     if layer_settings.get("show_car") and car_pos:
-        layers.append(pdk.Layer(
-            "ScatterplotLayer", 
-            data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}],
-            id="car",
-            get_position="pos", 
-            get_color=[0, 100, 255], 
-            get_radius=1000, 
-            radius_min_pixels=8, 
-            pickable=True, 
-            stroked=True, 
-            get_line_color=[255, 255, 255], 
-            line_width_min_pixels=2
-        ))
+        layers.append(pdk.Layer("ScatterplotLayer", data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}], id="car", get_position="pos", get_color=[0, 100, 255], get_radius=1000, radius_min_pixels=8, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
-    # NÄKYMÄ
     if coords:
         formatted_points = [[p[1], p[0]] for p in coords]
         view_state = compute_view(formatted_points, view_proportion=0.9)
@@ -148,9 +145,9 @@ def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, 
     return pdk.Deck(map_style=map_style, initial_view_state=view_state, layers=layers, api_keys={"mapbox": MAPBOX_TOKEN}, tooltip=tooltip)
 
 def clear_search():
-    keys = ["coords", "cameras", "here_incidents", "digitraffic_messages", "route_summary", "selected_camera"]
-    for k in keys:
-        st.session_state[k] = [] if k != "route_summary" else None
+    for key in st.session_state.keys():
+        del st.session_state[key]
+    st.cache_data.clear()
 
 # ====================================================================
 # UI
@@ -158,10 +155,10 @@ def clear_search():
 
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
-keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera"]
+keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host"]
 for key in keys:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages"] else None
+        st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps"] else None
 
 if "ui_default_time" not in st.session_state:
     st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
@@ -171,41 +168,29 @@ st.title("Reitti ja Liikenne Pingut Pro 🚗")
 if not MAPBOX_TOKEN:
     st.warning("⚠️ MAPBOX_TOKEN puuttuu.")
 
-# --- SIDEBAR (KAMERA) ---
+# --- SIDEBAR ---
 with st.sidebar:
     if st.session_state.selected_camera:
         cam = st.session_state.selected_camera
         st.success(f"📸 {cam.get('name', 'Kelikamera')}")
-        
         img_url = cam.get("imageUrl")
         if img_url:
             try:
-                # KORJAUS: Lisätään User-Agent ja käsitellään virheet
-                with st.spinner("Ladataan kuvaa..."):
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-                    }
-                    resp = requests.get(img_url, headers=headers, timeout=5)
-                    
-                    if resp.status_code == 200:
-                        st.image(resp.content, width="stretch", caption=f"ID: {cam.get('id')}")
-                    else:
-                        st.error(f"Kameran vastaus: {resp.status_code}")
-                        st.caption(f"URL: {img_url}")
+                headers = {"User-Agent": "Mozilla/5.0"}
+                resp = requests.get(img_url, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    st.image(resp.content, width="stretch", caption=f"ID: {cam.get('id')}")
+                else:
+                    st.error(f"Virhe: {resp.status_code}")
             except Exception as e:
-                st.error("Yhteysvirhe kameraan.")
-        else:
-            st.warning("Ei kuvalinkkiä.")
-        
+                st.error("Yhteysvirhe.")
         if st.button("Sulje kuva", type="primary"):
             st.session_state.selected_camera = None
             st.rerun()
         st.divider()
-    else:
-        st.info("💡 Klikkaa keltaista palloa kartalla nähdäksesi kuvan tässä.")
 
     st.header("🗺️ Asetukset")
-    map_style = st.selectbox("Karttatyyli", ["mapbox://styles/mapbox/streets-v12", "mapbox://styles/mapbox/satellite-streets-v12", "mapbox://styles/mapbox/dark-v11"])
+    map_style = st.selectbox("Karttatyyli", ["mapbox://styles/mapbox/dark-v11", "mapbox://styles/mapbox/streets-v12", "mapbox://styles/mapbox/satellite-streets-v12"])
     
     st.subheader("Reititys")
     routing_mode = st.radio("Optimointi", ["fast", "short"], format_func=lambda x: "Nopein" if x=="fast" else "Lyhin")
@@ -217,10 +202,28 @@ with st.sidebar:
     st.subheader("Tasot")
     layer_settings = {
         "show_route": st.checkbox("Reittiviiva", True),
+        "show_weather": st.checkbox("Sade-ennuste", True),
         "show_incidents": st.checkbox("Häiriöt", True),
         "show_cameras": st.checkbox("Kelikamerat 📷", True),
         "show_car": st.checkbox("Auto", True),
     }
+    
+    weather_opacity = 0.0
+    if layer_settings["show_weather"]:
+        weather_opacity = st.slider("Sään läpinäkyvyys", 0.0, 1.0, 0.6, step=0.1)
+
+    st.divider()
+    with st.expander("🛠️ Debug: Säädata"):
+        if st.session_state.weather_timestamps:
+            st.write(f"Ladattu {len(st.session_state.weather_timestamps)} aikaleimaa.")
+            if len(st.session_state.weather_timestamps) > 0:
+                ts = st.session_state.weather_timestamps[-1]
+                st.write(f"Viimeisin TS: {ts}")
+                # KORJATTU: Oikea URL-rakenne cache-palvelimelle
+                test_url = f"https://tile.cache.rainviewer.com/{ts}/256/6/36/19/6/1_1.png"
+                st.markdown(f"[Testaa tiili selaimessa]({test_url})")
+        else:
+            st.warning("Ei säädataa.")
 
 # --- INPUTS ---
 c1, c2, c3 = st.columns(3)
@@ -254,12 +257,10 @@ with c3:
 
 st.divider()
 
-# --- BUTTONS ---
 b1, b2 = st.columns([1, 4])
 with b1:
     if st.button("Hae reitti 🚀", type="primary", disabled=search_disabled):
         with st.spinner("Suunnitellaan..."):
-            
             o_c = st.session_state.current_location if use_gps else geocode_cached(origin)
             d_c = geocode_cached(dest)
             
@@ -277,6 +278,11 @@ with b1:
                     st.session_state.here_incidents = parse_traffic_incidents(r_data)
                     st.session_state.cameras = get_weather_cameras(st.session_state.coords)
                     st.session_state.digitraffic_messages = traffic_messages_near_route(st.session_state.coords)
+                    
+                    # Haetaan säädata (host ignoroidaan app.pyssä)
+                    _, ts_dict = get_cached_weather_data()
+                    st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
+                    
                     st.session_state.selected_camera = None
                     st.rerun()
                 else:
@@ -285,7 +291,9 @@ with b1:
                 st.error("Osoitevirhe.")
 
 with b2:
-    st.button("Tyhjennä", on_click=clear_search)
+    if st.button("Tyhjennä haku"):
+        clear_search()
+        st.rerun()
 
 # --- RESULTS ---
 if st.session_state.coords:
@@ -304,24 +312,26 @@ if st.session_state.coords:
         map_placeholder = st.empty()
         c_play, c_slider = st.columns([1, 4])
         with c_play: play = st.button("Play ▶️")
+        
         total_mins = int(dur * 60)
         if total_mins < 1: total_mins = 1
-        with c_slider: t_val = st.slider("Eteneminen", 0, total_mins, 0, label_visibility="collapsed")
+        with c_slider: t_val = st.slider("Matka etenee", 0, total_mins, 0, label_visibility="collapsed")
         
         idx = int((t_val / total_mins) * (len(coords) - 1))
         car_pos = coords[idx]
+        
+        sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t_val)
+        sim_ts = int(sim_dt.timestamp())
+        w_ts = None
+        if st.session_state.weather_timestamps:
+            w_ts = get_closest_timestamp(sim_ts, st.session_state.weather_timestamps)
+            st.caption(f"Sääkartta: {datetime.datetime.fromtimestamp(w_ts).strftime('%H:%M')}")
 
-        deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style)
+        # KORJAUS: Poistettu weather_host
+        deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, weather_opacity)
         
-        # --- KARTTA & VALINTA ---
-        selection = map_placeholder.pydeck_chart(
-            deck, 
-            width="stretch",
-            on_select="rerun", 
-            selection_mode="single-object"
-        )
+        selection = map_placeholder.pydeck_chart(deck, width="stretch", on_select="rerun", selection_mode="single-object")
         
-        # --- VALINNAN LUKU ---
         if selection.selection:
             found_index = None
             def get_idx(v):
@@ -330,41 +340,38 @@ if st.session_state.coords:
                 if isinstance(v, int): return v
                 return None
 
-            if "cameras" in selection.selection:
-                found_index = get_idx(selection.selection["cameras"])
-            
-            # Fallback: objekti
-            if found_index is None and "objects" in selection.selection:
-                 objs = selection.selection["objects"]
-                 if "cameras" in objs and objs["cameras"]:
-                     # Valinta onnistui suoraan object-tilassa
-                     new_cam = objs["cameras"][0]
-                     if st.session_state.selected_camera != new_cam:
+            if "objects" in selection.selection:
+                objs = selection.selection["objects"]
+                if "cameras" in objs and objs["cameras"]:
+                    new_cam = objs["cameras"][0]
+                    if st.session_state.selected_camera != new_cam:
                         st.session_state.selected_camera = new_cam
                         st.rerun()
-            
-            # Fallback: indeksi
-            if found_index is None:
-                for k, v in selection.selection.items():
-                    if k != "objects":
+            else:
+                if "cameras" in selection.selection: found_index = get_idx(selection.selection["cameras"])
+                if found_index is None:
+                    for v in selection.selection.values():
                         val = get_idx(v)
-                        if val is not None: 
-                            found_index = val
-                            break
-            
-            if found_index is not None and found_index < len(st.session_state.cameras):
-                new_cam = st.session_state.cameras[found_index]
-                if st.session_state.selected_camera != new_cam:
-                    st.session_state.selected_camera = new_cam
-                    st.rerun()
+                        if val is not None: found_index = val; break
+                
+                if found_index is not None and found_index < len(st.session_state.cameras):
+                    new_cam = st.session_state.cameras[found_index]
+                    if st.session_state.selected_camera != new_cam:
+                        st.session_state.selected_camera = new_cam
+                        st.rerun()
 
-        # Animaatio
         if play:
             step_size = max(1, total_mins // 50)
             for t in range(0, total_mins + 1, step_size):
                 idx = int((t / total_mins) * (len(coords) - 1))
                 car_pos = coords[idx]
-                deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style)
+                sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t)
+                w_ts = None
+                if st.session_state.weather_timestamps:
+                    w_ts = get_closest_timestamp(int(sim_dt.timestamp()), st.session_state.weather_timestamps)
+
+                # KORJAUS: Poistettu weather_host
+                deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, weather_opacity)
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
 
@@ -381,7 +388,6 @@ if st.session_state.coords:
             st.info("Ei korkeusdataa.")
             st.progress(t_val / total_mins)
 
-    # --- LISTAT ---
     st.divider()
     c1, c2 = st.columns(2)
     with c1:
