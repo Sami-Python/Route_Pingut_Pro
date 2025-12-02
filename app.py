@@ -54,36 +54,73 @@ def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, f
 # MAP CREATION
 # ====================================================================
 
-# KORJAUS: Poistettu weather_host parametreista
-def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, layer_settings, map_style, weather_ts, weather_opacity):
+# MUUTOS: Lisätty 'digitraffic_incidents' parametri
+def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity):
     layers = []
 
-    # 1. SÄÄ (TileLayer)
-    if layer_settings.get("show_weather") and weather_ts:
-        # KORJAUS:
-        # 1. Käytetään tile.cache.rainviewer.com (DNS toimii)
-        # 2. POISTETTU "/v2/radar" polusta. Cache-palvelin vaatii suoran aikaleiman.
-        tile_url = f"https://tile.cache.rainviewer.com/{weather_ts}/256/{{z}}/{{x}}/{{y}}/6/1_1.png"
+    # 1. SÄÄ (Manual Tiling via BitmapLayers)
+    # KORJAUS: Koska TileLayer on rikki, luomme tiilet manuaalisesti Pythonissa
+    # MUUTOS: Näytetään sää vaikka reittiä ei olisi (poistettu 'and coords')
+    if layer_settings.get("show_weather") and weather_ts and weather_path and weather_host:
         
-        layers.append(pdk.Layer(
-            "TileLayer",
-            id="weather-layer",
-            data=tile_url,
-            opacity=weather_opacity,
-            min_zoom=0,
-            max_zoom=19,
-            tileSize=256,
-            render_sub_layers=pdk.types.Function("""
-                function(props) {
-                    var bbox = props.tile.bbox;
-                    return new deck.BitmapLayer(props, {
-                        data: null,
-                        image: props.data,
-                        bounds: [bbox.west, bbox.south, bbox.east, bbox.north]
-                    });
-                }
-            """)
-        ))
+        # Apu-funktiot tiililaskentaan (Web Mercator)
+        def deg2num(lat_deg, lon_deg, zoom):
+            lat_rad = math.radians(lat_deg)
+            n = 2.0 ** zoom
+            xtile = int((lon_deg + 180.0) / 360.0 * n)
+            ytile = int((1.0 - math.asinh(math.tan(lat_rad)) / math.pi) / 2.0 * n)
+            return (xtile, ytile)
+
+        def num2deg(xtile, ytile, zoom):
+            n = 2.0 ** zoom
+            lon_deg = xtile / n * 360.0 - 180.0
+            lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * ytile / n)))
+            lat_deg = math.degrees(lat_rad)
+            return (lat_deg, lon_deg)
+
+        # 1. Määritä alue (Koko Suomi)
+        # Käytetään kiinteää bboxia, jotta sää näkyy koko maassa
+        min_lat, max_lat = 59.0, 71.0
+        min_lon, max_lon = 19.0, 33.0
+
+        # 2. Määritä zoom-taso (RainViewer tukee 6)
+        zoom = 6
+        
+        # 3. Laske tiilialue
+        x_min, y_max = deg2num(min_lat, min_lon, zoom) # Huom: y kasvaa etelään
+        x_max, y_min = deg2num(max_lat, max_lon, zoom)
+        
+        # Varmistus järjestyksestä
+        x_start, x_end = min(x_min, x_max), max(x_min, x_max)
+        y_start, y_end = min(y_min, y_max), max(y_min, y_max)
+
+        # 4. Generoi BitmapLayer jokaiselle tiilelle
+        # Rajoitetaan määrää varmuuden vuoksi (ettei tule satoja pyyntöjä)
+        max_tiles = 50 
+        count = 0
+        
+        for x in range(x_start, x_end + 1):
+            for y in range(y_start, y_end + 1):
+                if count >= max_tiles: break
+                
+                # Laske tiilen bbox (bounds)
+                # num2deg antaa tiilen vasemman yläkulman (NW)
+                # Tarvitsemme [west, south, east, north]
+                nw_lat, nw_lon = num2deg(x, y, zoom)
+                se_lat, se_lon = num2deg(x + 1, y + 1, zoom)
+                
+                bounds = [nw_lon, se_lat, se_lon, nw_lat]
+                
+                tile_url = f"{weather_host}{weather_path}/256/{zoom}/{x}/{y}/6/1_1.png"
+                
+                layers.append(pdk.Layer(
+                    "BitmapLayer",
+                    id=f"weather-tile-{x}-{y}",
+                    image=tile_url,
+                    bounds=bounds,
+                    opacity=weather_opacity
+                ))
+                count += 1
 
     # 2. REITTI
     if layer_settings.get("show_route") and coords:
@@ -123,13 +160,39 @@ def create_map(coords, incidents, car_pos, origin_coords, dest_coords, cameras, 
     if point_data:
         layers.append(pdk.Layer("ScatterplotLayer", data=point_data, id="endpoints", get_position="pos", get_color="color", get_radius=800, radius_min_pixels=6, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
-    # 5. HÄIRIÖT
+    # 5. HERE HÄIRIÖT (Punainen/Oranssi)
     if layer_settings.get("show_incidents") and incidents:
         incident_points = [{"pos": [i['lon'], i['lat']], "color": [200, 0, 0] if 'critical' in str(i['taso']) else [255, 140, 0], "name": i['tyyppi']} for i in incidents if i.get('lat')]
         if incident_points:
             layers.append(pdk.Layer("ScatterplotLayer", data=incident_points, id="incidents", get_position="pos", get_color="color", get_radius=600, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=1))
 
-    # 6. AUTO
+    # 6. DIGITRAFFIC HÄIRIÖT (Syaani - UUSI)
+    if layer_settings.get("show_incidents") and digitraffic_incidents:
+        dt_points = []
+        for d in digitraffic_incidents:
+            # Käytetään digitraffic_client.py:n palauttamia avaimia (lat, lon, otsikko)
+            if d.get('lat') and d.get('lon'):
+                dt_points.append({
+                    "pos": [d['lon'], d['lat']],
+                    "color": [0, 255, 255], # Syaani
+                    "name": f"FI: {d.get('otsikko', 'Tiedote')}"
+                })
+        
+        if dt_points:
+            layers.append(pdk.Layer(
+                "ScatterplotLayer", 
+                data=dt_points, 
+                id="dt_incidents", 
+                get_position="pos", 
+                get_color="color", 
+                get_radius=600, 
+                pickable=True, 
+                stroked=True, 
+                get_line_color=[0,0,0], 
+                line_width_min_pixels=1
+            ))
+
+    # 7. AUTO
     if layer_settings.get("show_car") and car_pos:
         layers.append(pdk.Layer("ScatterplotLayer", data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}], id="car", get_position="pos", get_color=[0, 100, 255], get_radius=1000, radius_min_pixels=8, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
@@ -155,13 +218,21 @@ def clear_search():
 
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
-keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host"]
+keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host", "weather_paths"]
 for key in keys:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps"] else None
+        if key == "weather_paths": st.session_state[key] = {}
 
 if "ui_default_time" not in st.session_state:
     st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
+
+if st.session_state.coords and (not st.session_state.weather_host or not st.session_state.weather_paths):
+    host, ts_dict = get_cached_weather_data()
+    st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
+    st.session_state.weather_paths = ts_dict
+    st.session_state.weather_host = host
+    st.rerun()
 
 st.title("Reitti ja Liikenne Pingut Pro 🚗")
 
@@ -211,6 +282,8 @@ with st.sidebar:
     weather_opacity = 0.0
     if layer_settings["show_weather"]:
         weather_opacity = st.slider("Sään läpinäkyvyys", 0.0, 1.0, 0.6, step=0.1)
+    
+    # DEBUG MODE REMOVED
 
     st.divider()
     with st.expander("🛠️ Debug: Säädata"):
@@ -219,11 +292,23 @@ with st.sidebar:
             if len(st.session_state.weather_timestamps) > 0:
                 ts = st.session_state.weather_timestamps[-1]
                 st.write(f"Viimeisin TS: {ts}")
-                # KORJATTU: Oikea URL-rakenne cache-palvelimelle
-                test_url = f"https://tile.cache.rainviewer.com/{ts}/256/6/36/19/6/1_1.png"
-                st.markdown(f"[Testaa tiili selaimessa]({test_url})")
+                
+                host = st.session_state.weather_host
+                path = st.session_state.weather_paths.get(ts)
+                
+                if host and path:
+                    test_url = f"{host}{path}/256/6/36/19/6/1_1.png"
+                    st.markdown(f"[Testaa tiili selaimessa]({test_url})")
+                else:
+                    st.warning("Host tai polku puuttuu.")
+            else:
+                st.warning("Ei aikaleimoja.")
         else:
             st.warning("Ei säädataa.")
+        
+        st.write("---")
+        st.write(f"Host: {st.session_state.weather_host}")
+        st.write(f"Paths count: {len(st.session_state.weather_paths) if st.session_state.weather_paths else 0}")
 
 # --- INPUTS ---
 c1, c2, c3 = st.columns(3)
@@ -279,9 +364,11 @@ with b1:
                     st.session_state.cameras = get_weather_cameras(st.session_state.coords)
                     st.session_state.digitraffic_messages = traffic_messages_near_route(st.session_state.coords)
                     
-                    # Haetaan säädata (host ignoroidaan app.pyssä)
-                    _, ts_dict = get_cached_weather_data()
+                    # Haetaan säädata
+                    host, ts_dict = get_cached_weather_data()
                     st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
+                    st.session_state.weather_paths = ts_dict
+                    st.session_state.weather_host = host
                     
                     st.session_state.selected_camera = None
                     st.rerun()
@@ -323,12 +410,29 @@ if st.session_state.coords:
         sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t_val)
         sim_ts = int(sim_dt.timestamp())
         w_ts = None
+        w_path = None
         if st.session_state.weather_timestamps:
             w_ts = get_closest_timestamp(sim_ts, st.session_state.weather_timestamps)
+            if w_ts and st.session_state.weather_paths:
+                w_path = st.session_state.weather_paths.get(w_ts)
             st.caption(f"Sääkartta: {datetime.datetime.fromtimestamp(w_ts).strftime('%H:%M')}")
 
-        # KORJAUS: Poistettu weather_host
-        deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, weather_opacity)
+        # MUUTOS: Välitetään digitraffic_messages create_map:iin
+        dt_msgs = st.session_state.get("digitraffic_messages", [])
+
+        deck = create_map(coords, 
+                          st.session_state.here_incidents, 
+                          dt_msgs, # <--- UUSI
+                          car_pos, 
+                          st.session_state.origin_coords, 
+                          st.session_state.dest_coords, 
+                          st.session_state.cameras, 
+                          layer_settings, 
+                          map_style, 
+                          w_ts, 
+                          w_path, 
+                          st.session_state.weather_host, 
+                          weather_opacity)
         
         selection = map_placeholder.pydeck_chart(deck, width="stretch", on_select="rerun", selection_mode="single-object")
         
@@ -367,11 +471,14 @@ if st.session_state.coords:
                 car_pos = coords[idx]
                 sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t)
                 w_ts = None
+                w_path = None
                 if st.session_state.weather_timestamps:
                     w_ts = get_closest_timestamp(int(sim_dt.timestamp()), st.session_state.weather_timestamps)
+                    if w_ts and st.session_state.weather_paths:
+                        w_path = st.session_state.weather_paths.get(w_ts)
 
-                # KORJAUS: Poistettu weather_host
-                deck = create_map(coords, st.session_state.here_incidents, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, weather_opacity)
+                # MUUTOS: Välitetään digitraffic_messages myös silmukassa
+                deck = create_map(coords, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
 

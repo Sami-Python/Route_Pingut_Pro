@@ -26,19 +26,19 @@ def get_rainviewer_data() -> tuple:
         # 2. Mennyt data
         if "radar" in data and "past" in data["radar"]:
             for item in data["radar"]["past"]:
-                timestamps[item["time"]] = "radar"
+                timestamps[item["time"]] = item["path"]
                 
         # 3. Ennuste
         if "radar" in data and "nowcast" in data["radar"]:
             for item in data["radar"]["nowcast"]:
-                timestamps[item["time"]] = "forecast"
+                timestamps[item["time"]] = item["path"]
                 
     except Exception as e:
         print(f"RainViewer API error: {e}")
         # Hätätapaus: luodaan nykyhetki
         now = int(time.time())
         now = now - (now % 600)
-        timestamps[now] = "fallback"
+        timestamps[now] = f"/v2/radar/{now}" # Fallback path assumption
         
     return host, timestamps
 
