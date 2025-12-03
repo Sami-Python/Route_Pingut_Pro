@@ -90,7 +90,7 @@ class RainViewerResponse(BaseModel):
 app = FastAPI(
     title="Reitti API",
     description="REST API HERE, Digitraffic ja RainViewer -datalle",
-    version="1.1.0"
+    version="1.4.0"
 )
 
 # CORS (jos frontend on eri portissa)
@@ -291,7 +291,7 @@ def root():
         "message": "Reitti API - HERE, Digitraffic, RainViewer",
         "docs": "/docs",
         "redoc": "/redoc",
-        "version": "1.1.0"
+        "version": "1.4.0"
     }
 
 # ====================================================================

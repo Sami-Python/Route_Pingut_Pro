@@ -20,6 +20,10 @@ REST API reitti- ja liikennetiedoille:
 - Reitin haku ja optimointi
 - Kelikamerat
 - Liikennetiedotteet
+- Tiesääasemat
+- Muuttuvat opasteet (VMS)
+- Kunnossapitotehtävät
+- LAM-mittauspisteet
 - Säätiilien metatiedot
 
 ## Asennus
@@ -127,8 +131,8 @@ Lisää dokumentaatiota löytyy `docs/`-kansiosta:
 ### Testaus
 ```bash
 # API-testit
-python API_test.py
-python API_digi_test.py
+python debug/API_test.py
+python debug/API_digi_test.py
 ```
 
 ### CI/CD
@@ -148,3 +152,4 @@ Projekti on kehitetty opetus- ja demonstraatiotarkoituksiin.
 - **v1.1** - Kelikamerat ja häiriötiedot
 - **v1.2** - Sade-ennuste koko Suomelle
 - **v1.3** - FastAPI REST API
+- **v1.4** - Laajennettu Digitraffic-tuki (Tiesää, VMS, Kunnossapito, LAM) ja sääreititys
