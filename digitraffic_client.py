@@ -1,6 +1,7 @@
 import requests
 from typing import List, Tuple, Optional, Dict, Any
 from shapely.geometry import LineString, shape, Point
+import datetime
 
 # --------------------------------------------------------------------
 # 1. LIIKENNETIEDOTTEET (SHAPELY)
@@ -231,7 +232,7 @@ def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_me
             
             lon, lat = float(coords_raw[0]), float(coords_raw[1])
             point = Point(lon, lat)
-            
+
             if route_line.distance(point) < buffer_degrees:
                 props = feature.get("properties", {})
                 sid = props.get("id")
@@ -239,13 +240,27 @@ def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_me
                 # Haetaan arvot lookupista
                 vals = data_lookup.get(sid, {})
                 
+                raw_name = props.get("name", "Sääasema")
+                clean_name = raw_name.replace("_", " ")
+                
+                # Yritetään parsia kunta ja tie nimestä (esim. vt4_Helsinki_Jakomäki)
+                parts = raw_name.split("_")
+                municipality = ""
+                road_num = ""
+                if len(parts) >= 2:
+                    if parts[0].lower().startswith(("vt", "kt", "st")) or parts[0].isdigit():
+                        road_num = parts[0]
+                        municipality = parts[1]
+                
                 stations.append({
                     "id": sid,
-                    "name": props.get("names", {}).get("fi", "Sääasema"),
+                    "name": clean_name,
                     "lat": lat,
                     "lon": lon,
                     "air_temp": vals.get("air_temp"),
-                    "road_temp": vals.get("road_temp")
+                    "road_temp": vals.get("road_temp"),
+                    "municipality": municipality,
+                    "road_number": road_num
                 })
         except:
             continue
@@ -428,3 +443,42 @@ def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int
             continue
         
     return results
+
+def get_road_weather_history(station_id: int) -> List[Dict[str, Any]]:
+    """
+    Hakee tiesääaseman historiatiedot (viimeiset 12h).
+    """
+    import datetime
+    
+    end_time = datetime.datetime.utcnow()
+    start_time = end_time - datetime.timedelta(hours=12)
+    
+    # ISO format for API
+    from_str = start_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+    
+    url = f"https://tie.digitraffic.fi/api/weather/v1/stations/{station_id}/data/history?from={from_str}"
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+        
+        history = []
+        for item in data:
+            ts = item.get("measuredTime")
+            air = None
+            road = None
+            for s in item.get("sensorValues", []):
+                if s["id"] == 1: air = s["value"]
+                if s["id"] == 3: road = s["value"]
+            
+            if air is not None or road is not None:
+                history.append({
+                    "time": ts,
+                    "air_temp": air,
+                    "road_temp": road
+                })
+        return history
+    except Exception as e:
+        print(f"History API error: {e}")
+        return []

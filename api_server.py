@@ -12,7 +12,15 @@ import uvicorn
 
 # Tuodaan client-moduulit
 from here_client import geocode, route, parse_traffic_incidents
-from digitraffic_client import get_weather_cameras, traffic_messages_near_route
+from digitraffic_client import (
+    get_weather_cameras, 
+    traffic_messages_near_route,
+    get_road_weather_stations,
+    get_vms_stations,
+    get_maintenance_data,
+    get_lam_stations,
+    get_road_weather_history
+)
 from weather_client import get_rainviewer_data, get_closest_timestamp
 
 # ====================================================================
@@ -50,6 +58,26 @@ class TrafficMessageResponse(BaseModel):
     messages: List[Dict[str, Any]]
     count: int
 
+class RoadWeatherResponse(BaseModel):
+    stations: List[Dict[str, Any]]
+    count: int
+
+class VMSResponse(BaseModel):
+    signs: List[Dict[str, Any]]
+    count: int
+
+class MaintenanceResponse(BaseModel):
+    tasks: List[Dict[str, Any]]
+    count: int
+
+class LAMResponse(BaseModel):
+    stations: List[Dict[str, Any]]
+    count: int
+
+class HistoryResponse(BaseModel):
+    history: List[Dict[str, Any]]
+    count: int
+
 class RainViewerResponse(BaseModel):
     host: str
     timestamps: List[int]
@@ -62,7 +90,7 @@ class RainViewerResponse(BaseModel):
 app = FastAPI(
     title="Reitti API",
     description="REST API HERE, Digitraffic ja RainViewer -datalle",
-    version="1.0.0"
+    version="1.1.0"
 )
 
 # CORS (jos frontend on eri portissa)
@@ -82,11 +110,6 @@ app.add_middleware(
 def api_geocode(address: str = Query(..., description="Osoite geokoodaukseen")):
     """
     Muuttaa osoitteen koordinaateiksi HERE Geocode API:lla.
-    
-    **Esimerkki:**
-    ```
-    GET /api/geocode?address=Helsinki
-    ```
     """
     coords = geocode(address)
     if coords:
@@ -102,16 +125,6 @@ def api_geocode(address: str = Query(..., description="Osoite geokoodaukseen")):
 def api_route(req: RouteRequest):
     """
     Hakee reitin HERE Routing API:lla.
-    
-    **Parametrit:**
-    - origin_lat, origin_lon: Lähtöpiste
-    - dest_lat, dest_lon: Määränpää
-    - departure_time: ISO-muotoinen aika (valinnainen)
-    - routing_mode: "fast" tai "short"
-    - avoid_features: Lista välttämisiä (esim. ["tollRoad", "ferry"])
-    
-    **Palauttaa:**
-    - Matka (km), kesto (h), polyline, häiriöt
     """
     origin = (req.origin_lat, req.origin_lon)
     dest = (req.dest_lat, req.dest_lon)
@@ -148,52 +161,89 @@ def api_route(req: RouteRequest):
 # ENDPOINTS - DIGITRAFFIC
 # ====================================================================
 
+def parse_route_coords(route_coords: str) -> List[Tuple[float, float]]:
+    try:
+        coords = []
+        for pair in route_coords.split(";"):
+            lat, lon = map(float, pair.split(","))
+            coords.append((lat, lon))
+        return coords
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Virheellinen koordinaattimuoto: {e}")
+
 @app.get("/api/digitraffic/cameras", response_model=WeatherCameraResponse, tags=["Digitraffic"])
 def api_weather_cameras(
     route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa: lat1,lon1;lat2,lon2;...")
 ):
     """
-    Hakee kelikamerat reitin varrelta Digitraffic API:sta.
-    
-    **Esimerkki:**
-    ```
-    GET /api/digitraffic/cameras?route_coords=60.17,24.94;61.49,23.77
-    ```
+    Hakee kelikamerat reitin varrelta.
     """
-    try:
-        # Parsitaan koordinaatit
-        coords = []
-        for pair in route_coords.split(";"):
-            lat, lon = map(float, pair.split(","))
-            coords.append((lat, lon))
-        
-        cameras = get_weather_cameras(coords)
-        return WeatherCameraResponse(cameras=cameras, count=len(cameras))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Virheellinen koordinaattimuoto: {e}")
+    coords = parse_route_coords(route_coords)
+    cameras = get_weather_cameras(coords)
+    return WeatherCameraResponse(cameras=cameras, count=len(cameras))
 
 @app.get("/api/digitraffic/messages", response_model=TrafficMessageResponse, tags=["Digitraffic"])
 def api_traffic_messages(
     route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa")
 ):
     """
-    Hakee liikennetiedotteet reitin varrelta Digitraffic API:sta.
-    
-    **Esimerkki:**
-    ```
-    GET /api/digitraffic/messages?route_coords=60.17,24.94;61.49,23.77
-    ```
+    Hakee liikennetiedotteet reitin varrelta.
     """
-    try:
-        coords = []
-        for pair in route_coords.split(";"):
-            lat, lon = map(float, pair.split(","))
-            coords.append((lat, lon))
-        
-        messages = traffic_messages_near_route(coords)
-        return TrafficMessageResponse(messages=messages, count=len(messages))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Virheellinen koordinaattimuoto: {e}")
+    coords = parse_route_coords(route_coords)
+    messages = traffic_messages_near_route(coords)
+    return TrafficMessageResponse(messages=messages, count=len(messages))
+
+@app.get("/api/digitraffic/road-weather", response_model=RoadWeatherResponse, tags=["Digitraffic"])
+def api_road_weather(
+    route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa")
+):
+    """
+    Hakee tiesääasemat ja niiden mittaustiedot reitin varrelta.
+    """
+    coords = parse_route_coords(route_coords)
+    stations = get_road_weather_stations(coords)
+    return RoadWeatherResponse(stations=stations, count=len(stations))
+
+@app.get("/api/digitraffic/vms", response_model=VMSResponse, tags=["Digitraffic"])
+def api_vms(
+    route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa")
+):
+    """
+    Hakee muuttuvat opasteet (VMS) reitin varrelta.
+    """
+    coords = parse_route_coords(route_coords)
+    signs = get_vms_stations(coords)
+    return VMSResponse(signs=signs, count=len(signs))
+
+@app.get("/api/digitraffic/maintenance", response_model=MaintenanceResponse, tags=["Digitraffic"])
+def api_maintenance(
+    route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa")
+):
+    """
+    Hakee kunnossapitotehtävät (esim. auraus) reitin varrelta.
+    """
+    coords = parse_route_coords(route_coords)
+    tasks = get_maintenance_data(coords)
+    return MaintenanceResponse(tasks=tasks, count=len(tasks))
+
+@app.get("/api/digitraffic/lam", response_model=LAMResponse, tags=["Digitraffic"])
+def api_lam(
+    route_coords: str = Query(..., description="Reitin koordinaatit CSV-muodossa")
+):
+    """
+    Hakee LAM-mittauspisteet reitin varrelta.
+    """
+    coords = parse_route_coords(route_coords)
+    stations = get_lam_stations(coords)
+    return LAMResponse(stations=stations, count=len(stations))
+
+@app.get("/api/digitraffic/road-weather/{station_id}/history", response_model=HistoryResponse, tags=["Digitraffic"])
+def api_road_weather_history(station_id: int):
+    """
+    Hakee tiesääaseman historiatiedot (demo/mock).
+    """
+    history = get_road_weather_history(station_id)
+    return HistoryResponse(history=history, count=len(history))
 
 # ====================================================================
 # ENDPOINTS - RAINVIEWER (SÄÄ)
@@ -203,14 +253,6 @@ def api_traffic_messages(
 def api_rainviewer():
     """
     Hakee RainViewerin säätiilien palvelimen (host) ja aikaleimat.
-    
-    **Palauttaa:**
-    - host: Tile-palvelimen URL
-    - timestamps: Lista Unix-aikaleimoja (sekunteina)
-    - count: Aikaleiman määrä
-    
-    **Käyttö:**
-    Rakenna tile URL: `{host}/v2/radar/{timestamp}/256/{z}/{x}/{y}/6/1_1.png`
     """
     host, ts_dict = get_rainviewer_data()
     timestamps = sorted(list(ts_dict.keys()))
@@ -228,11 +270,6 @@ def api_closest_timestamp(
 ):
     """
     Löytää lähimmän aikaleiman annetusta listasta.
-    
-    **Esimerkki:**
-    ```
-    GET /api/weather/closest-timestamp?target=1701456000&timestamps=1701455400,1701456000,1701456600
-    ```
     """
     try:
         ts_list = [int(t) for t in timestamps.split(",")]
@@ -254,7 +291,7 @@ def root():
         "message": "Reitti API - HERE, Digitraffic, RainViewer",
         "docs": "/docs",
         "redoc": "/redoc",
-        "version": "1.0.0"
+        "version": "1.1.0"
     }
 
 # ====================================================================

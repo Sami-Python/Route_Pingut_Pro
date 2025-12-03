@@ -43,10 +43,11 @@ def route(origin: Tuple[float, float],
           destination: Tuple[float, float], 
           departure_time: str = None, 
           routing_mode: str = "fastest", 
-          avoid_features: List[str] = None) -> Optional[Dict[str, Any]]:
+          avoid_features: List[str] = None,
+          alternatives: int = 0) -> Optional[Dict[str, Any]]:
     """
     Hakee reitin HERE Routing v8 API:sta.
-    Tukee nyt myös reititysasetuksia (mode, avoid).
+    Tukee nyt myös reititysasetuksia (mode, avoid) ja vaihtoehtoisia reittejä.
     """
     url = "https://router.hereapi.com/v8/routes"
     
@@ -58,7 +59,8 @@ def route(origin: Tuple[float, float],
         "return": "polyline,summary,incidents,elevation", 
         "spans": "incidents", 
         "apiKey": HERE_API_KEY,
-        "routingMode": routing_mode
+        "routingMode": routing_mode,
+        "alternatives": alternatives
     }
 
     # Jos lähtöaika on annettu

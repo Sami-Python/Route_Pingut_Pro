@@ -25,7 +25,8 @@ from digitraffic_client import (
     get_road_weather_stations, 
     get_vms_stations, 
     get_maintenance_data, 
-    get_lam_stations
+    get_lam_stations,
+    get_road_weather_history
 )
 from weather_client import get_rainviewer_data, get_closest_timestamp
 
@@ -38,8 +39,9 @@ def get_cached_route(origin: Tuple[float, float],
                      dest: Tuple[float, float], 
                      dep_time: str,
                      mode: str,
-                     avoid_list: List[str]):
-    return route(origin, dest, departure_time=dep_time, routing_mode=mode, avoid_features=avoid_list)
+                     avoid_list: List[str],
+                     alternatives: int = 0):
+    return route(origin, dest, departure_time=dep_time, routing_mode=mode, avoid_features=avoid_list, alternatives=alternatives)
 
 @st.cache_data(ttl=3600)
 def geocode_cached(query: str):
@@ -49,11 +51,15 @@ def geocode_cached(query: str):
 def get_cached_weather_data():
     return get_rainviewer_data()
 
-def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, float]]:
+def extract_route_summary(route_section: Dict[str, Any]) -> Optional[Tuple[float, float, float]]:
     try:
-        section = route_data["routes"][0]["sections"][0]
-        summary = section["summary"]
-        return summary["length"] / 1000.0, summary["duration"] / 3600.0
+        summary = route_section["summary"]
+        # Palautetaan (pituus_km, kesto_h, kesto_ilman_liikennettä_h)
+        return (
+            summary["length"] / 1000.0, 
+            summary["duration"] / 3600.0,
+            summary.get("baseDuration", summary["duration"]) / 3600.0
+        )
     except Exception:
         return None
 
@@ -61,7 +67,7 @@ def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, f
 # MAP CREATION
 # ====================================================================
 
-def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, 
+def create_map(all_routes, selected_route_index, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, 
                road_weather, vms, maintenance, lam,
                layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity):
     layers = []
@@ -116,18 +122,35 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
                 ))
                 count += 1
 
-    # 2. REITTI
-    if layer_settings.get("show_route") and coords:
-        layers.append(pdk.Layer(
-            "PathLayer",
-            data=[{"path": [[p[1], p[0]] for p in coords]}],
-            id="route",
-            get_path="path",
-            get_color=[60, 160, 255],
-            width_scale=20,
-            width_min_pixels=3,
-            opacity=0.8,
-        ))
+    # 2. REITIT (Vaihtoehtoiset ja valittu)
+    if layer_settings.get("show_route") and all_routes:
+        # Piirretään ensin ei-valitut reitit harmaina
+        for i, r_coords in enumerate(all_routes):
+            if i == selected_route_index: continue
+            layers.append(pdk.Layer(
+                "PathLayer",
+                data=[{"path": [[p[1], p[0]] for p in r_coords]}],
+                id=f"route-{i}",
+                get_path="path",
+                get_color=[150, 150, 150],
+                width_scale=20,
+                width_min_pixels=2,
+                opacity=0.4,
+            ))
+        
+        # Piirretään valittu reitti korostettuna
+        if selected_route_index < len(all_routes):
+            sel_coords = all_routes[selected_route_index]
+            layers.append(pdk.Layer(
+                "PathLayer",
+                data=[{"path": [[p[1], p[0]] for p in sel_coords]}],
+                id="route-selected",
+                get_path="path",
+                get_color=[60, 160, 255],
+                width_scale=20,
+                width_min_pixels=4,
+                opacity=0.9,
+            ))
 
     # 3. KELIKAMERAT
     if layer_settings.get("show_cameras") and cameras:
@@ -198,7 +221,10 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
             rw_points.append({
                 "pos": [r['lon'], r['lat']],
                 "color": color,
-                "name": f"{r.get('name')}\nIlma: {r.get('air_temp')}°C\nTie: {r.get('road_temp')}°C"
+                "name": f"{r.get('name')}\nIlma: {r.get('air_temp')}°C\nTie: {r.get('road_temp')}°C",
+                "id": r.get("id"),
+                "air_temp": r.get("air_temp"),
+                "road_temp": r.get("road_temp")
             })
         
         layers.append(pdk.Layer(
@@ -212,7 +238,8 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
             stroked=True,
             get_line_color=[255, 255, 255],
             line_width_min_pixels=1,
-            radius_min_pixels=4
+            radius_min_pixels=4,
+            auto_highlight=True
         ))
 
     # 8. VMS (Muuttuvat opasteet)
@@ -277,9 +304,10 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
     if layer_settings.get("show_car") and car_pos:
         layers.append(pdk.Layer("ScatterplotLayer", data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}], id="car", get_position="pos", get_color=[0, 100, 255], get_radius=1000, radius_min_pixels=8, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
-    if coords:
+    if all_routes and selected_route_index < len(all_routes):
+        coords = all_routes[selected_route_index]
         formatted_points = [[p[1], p[0]] for p in coords]
-        view_state = compute_view(formatted_points, view_proportion=0.9)
+        view_state = compute_view(formatted_points, view_proportion=0.75)
         view_state.pitch = 0
     else:
         view_state = pdk.ViewState(latitude=61.92, longitude=25.74, zoom=6)
@@ -299,18 +327,19 @@ def clear_search():
 
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
-keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host", "weather_paths",
+keys = ["all_routes", "route_summaries", "selected_route_index", "cameras", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "selected_station", "weather_timestamps", "weather_host", "weather_paths",
         "road_weather", "vms", "maintenance", "lam"]
 
 for key in keys:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam"] else None
+        st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam"] else None
         if key == "weather_paths": st.session_state[key] = {}
+        if key == "selected_route_index": st.session_state[key] = 0
 
 if "ui_default_time" not in st.session_state:
     st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
 
-if st.session_state.coords and (not st.session_state.weather_host or not st.session_state.weather_paths):
+if st.session_state.all_routes and (not st.session_state.weather_host or not st.session_state.weather_paths):
     host, ts_dict = get_cached_weather_data()
     st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
     st.session_state.weather_paths = ts_dict
@@ -343,6 +372,19 @@ with st.sidebar:
             st.rerun()
         st.divider()
 
+    if st.session_state.selected_station:
+        st_data = st.session_state.selected_station
+        st.info(f"🌡️ Sääasema: {st_data.get('name', 'Nimetön')}")
+        
+        c1, c2 = st.columns(2)
+        c1.metric("Ilma", f"{st_data.get('air_temp')} °C")
+        c2.metric("Tie", f"{st_data.get('road_temp')} °C")
+        
+        if st.button("Sulje sääasema", type="primary"):
+            st.session_state.selected_station = None
+            st.rerun()
+        st.divider()
+
     st.header("🗺️ Asetukset")
     map_style = st.selectbox("Karttatyyli", ["mapbox://styles/mapbox/dark-v11", "mapbox://styles/mapbox/streets-v12", "mapbox://styles/mapbox/satellite-streets-v12"])
     
@@ -359,10 +401,10 @@ with st.sidebar:
         "show_weather": st.checkbox("Sade-ennuste", True),
         "show_incidents": st.checkbox("Häiriöt", True),
         "show_cameras": st.checkbox("Kelikamerat 📷", True),
-        "show_road_weather": st.checkbox("Tiesää 🌡️", False),
-        "show_vms": st.checkbox("Opasteet 🛑", False),
-        "show_maintenance": st.checkbox("Kunnossapito 🚜", False),
-        "show_lam": st.checkbox("LAM-pisteet 📊", False),
+        "show_road_weather": st.checkbox("Tiesää 🌡️", True),
+        "show_vms": st.checkbox("Opasteet 🛑", True),
+        "show_maintenance": st.checkbox("Kunnossapito 🚜", True),
+        "show_lam": st.checkbox("LAM-pisteet 📊", True),
         "show_car": st.checkbox("Auto", True),
     }
     
@@ -439,21 +481,37 @@ with b1:
                 st.session_state.dest_coords = d_c
                 st.session_state.dep_dt = dep_dt_naive
                 
-                r_data = get_cached_route(o_c, d_c, dep_iso, routing_mode, avoid_options)
+                # Haetaan reitit (2 vaihtoehtoa jos fast, muuten 0)
+                alternatives = 2 if routing_mode == "fast" else 0
+                r_data = get_cached_route(o_c, d_c, dep_iso, routing_mode, avoid_options, alternatives)
                 
                 if r_data and "routes" in r_data:
-                    poly = r_data["routes"][0]["sections"][0]["polyline"]
-                    st.session_state.coords = flexpolyline.decode(poly)
-                    st.session_state.route_summary = extract_route_summary(r_data)
-                    st.session_state.here_incidents = parse_traffic_incidents(r_data)
-                    st.session_state.cameras = get_weather_cameras(st.session_state.coords)
-                    st.session_state.digitraffic_messages = traffic_messages_near_route(st.session_state.coords)
+                    st.session_state.all_routes = []
+                    st.session_state.route_summaries = []
                     
-                    # Uudet haut
-                    st.session_state.road_weather = get_road_weather_stations(st.session_state.coords)
-                    st.session_state.vms = get_vms_stations(st.session_state.coords)
-                    st.session_state.maintenance = get_maintenance_data(st.session_state.coords)
-                    st.session_state.lam = get_lam_stations(st.session_state.coords)
+                    for r in r_data["routes"]:
+                        for s in r["sections"]:
+                            poly = s["polyline"]
+                            st.session_state.all_routes.append(flexpolyline.decode(poly))
+                            st.session_state.route_summaries.append(extract_route_summary(s))
+                            # Huom: HERE palauttaa useita reittejä, joissa voi olla useita sektioita.
+                            # Yksinkertaistuksen vuoksi oletamme tässä 1 sektio per reitti tai otamme vain ensimmäisen.
+                            # Oikeampi tapa olisi yhdistää sektiot.
+                            break # Otetaan vain eka sektio per reitti demo-tarkoituksiin
+                    
+                    st.session_state.selected_route_index = 0
+                    
+                    # Käytetään ekaa reittiä metadatan hakuun
+                    if st.session_state.all_routes:
+                        first_route_coords = st.session_state.all_routes[0]
+                        st.session_state.here_incidents = parse_traffic_incidents(r_data) # Tämä parsii kaikki, mutta visualisointi voi olla haastavaa
+                        st.session_state.cameras = get_weather_cameras(first_route_coords)
+                        st.session_state.digitraffic_messages = traffic_messages_near_route(first_route_coords)
+                        
+                        st.session_state.road_weather = get_road_weather_stations(first_route_coords)
+                        st.session_state.vms = get_vms_stations(first_route_coords)
+                        st.session_state.maintenance = get_maintenance_data(first_route_coords)
+                        st.session_state.lam = get_lam_stations(first_route_coords)
                     
                     # Haetaan säädata
                     host, ts_dict = get_cached_weather_data()
@@ -462,6 +520,7 @@ with b1:
                     st.session_state.weather_host = host
                     
                     st.session_state.selected_camera = None
+                    st.session_state.selected_station = None
                     st.rerun()
                 else:
                     st.error("Ei reittiä.")
@@ -474,9 +533,30 @@ with b2:
         st.rerun()
 
 # --- RESULTS ---
-if st.session_state.coords:
-    coords = st.session_state.coords
-    dist, dur = st.session_state.route_summary if st.session_state.route_summary else (0,0)
+if st.session_state.all_routes:
+    # Traffic toggle
+    use_traffic = st.checkbox("Huomioi liikenne", value=True)
+
+    # Reitin valinta
+    route_opts = []
+    for i, summ in enumerate(st.session_state.route_summaries):
+        if summ:
+            dist, dur_traffic, dur_base = summ
+            dur = dur_traffic if use_traffic else dur_base
+            route_opts.append(f"Reitti {i+1}: {dist:.1f} km, {int(dur)}h {int((dur%1)*60)}min")
+        else:
+            route_opts.append(f"Reitti {i+1}: (Tiedot puuttuvat)")
+    
+    selected_opt = st.radio("Valitse reitti", route_opts, index=st.session_state.selected_route_index, horizontal=True)
+    st.session_state.selected_route_index = route_opts.index(selected_opt)
+    
+    coords = st.session_state.all_routes[st.session_state.selected_route_index]
+    
+    if st.session_state.route_summaries[st.session_state.selected_route_index]:
+        dist, dur_traffic, dur_base = st.session_state.route_summaries[st.session_state.selected_route_index]
+        dur = dur_traffic if use_traffic else dur_base
+    else:
+        dist, dur = 0, 0
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Matka", f"{dist:.1f} km")
@@ -510,7 +590,8 @@ if st.session_state.coords:
 
         dt_msgs = st.session_state.get("digitraffic_messages", [])
 
-        deck = create_map(coords, 
+        deck = create_map(st.session_state.all_routes, 
+                          st.session_state.selected_route_index,
                           st.session_state.here_incidents, 
                           dt_msgs, 
                           car_pos, 
@@ -545,18 +626,28 @@ if st.session_state.coords:
                     if st.session_state.selected_camera != new_cam:
                         st.session_state.selected_camera = new_cam
                         st.rerun()
+                
+                if "road_weather" in objs and objs["road_weather"]:
+                    new_station = objs["road_weather"][0]
+                    if st.session_state.selected_station != new_station:
+                        st.session_state.selected_station = new_station
+                        st.rerun()
             else:
                 if "cameras" in selection.selection: found_index = get_idx(selection.selection["cameras"])
-                if found_index is None:
-                    for v in selection.selection.values():
-                        val = get_idx(v)
-                        if val is not None: found_index = val; break
-                
                 if found_index is not None and found_index < len(st.session_state.cameras):
                     new_cam = st.session_state.cameras[found_index]
                     if st.session_state.selected_camera != new_cam:
                         st.session_state.selected_camera = new_cam
                         st.rerun()
+                
+                # Fallback for road_weather if needed (usually objects is enough for single-object selection)
+                if "road_weather" in selection.selection:
+                    idx = get_idx(selection.selection["road_weather"])
+                    if idx is not None and idx < len(st.session_state.road_weather):
+                        new_station = st.session_state.road_weather[idx]
+                        if st.session_state.selected_station != new_station:
+                            st.session_state.selected_station = new_station
+                            st.rerun()
 
         if play:
             step_size = max(1, total_mins // 50)
@@ -571,7 +662,7 @@ if st.session_state.coords:
                     if w_ts and st.session_state.weather_paths:
                         w_path = st.session_state.weather_paths.get(w_ts)
 
-                deck = create_map(coords, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, 
+                deck = create_map(st.session_state.all_routes, st.session_state.selected_route_index, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, 
                                   st.session_state.road_weather, st.session_state.vms, st.session_state.maintenance, st.session_state.lam,
                                   layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
                 map_placeholder.pydeck_chart(deck, width="stretch")
@@ -604,3 +695,56 @@ if st.session_state.coords:
             for msg in st.session_state.digitraffic_messages:
                 with st.expander(f"🇫🇮 {msg.get('otsikko')}"):
                     st.write(msg.get("kuvaus"))
+
+    st.divider()
+    st.subheader("🌤️ Sääennuste reitille (Arvio)")
+    
+    if st.session_state.all_routes and st.session_state.road_weather:
+        route_points = st.session_state.all_routes[st.session_state.selected_route_index]
+        
+        # Tarkistetaan, onko summary olemassa
+        summary = st.session_state.route_summaries[st.session_state.selected_route_index]
+        if summary:
+            dur_hours = summary[1] # Käytetään aina liikennettä sääennusteen arviointiin (tai voisi käyttää valittua)
+        else:
+            dur_hours = 0
+            
+        dep_time = st.session_state.dep_dt
+        
+        # Valitaan 5 pistettä reitiltä
+        indices = [0, len(route_points)//4, len(route_points)//2, 3*len(route_points)//4, len(route_points)-1]
+        cols = st.columns(5)
+        
+        for i, idx in enumerate(indices):
+            point = route_points[idx]
+            progress = idx / len(route_points)
+            eta = dep_time + datetime.timedelta(hours=dur_hours * progress)
+            
+            # Etsitään lähin sääasema
+            nearest_station = None
+            min_dist = float("inf")
+            
+            for s in st.session_state.road_weather:
+                # Yksinkertainen etäisyys (ei haittaa vaikka epätarkka, riittää demoon)
+                d = (s['lat'] - point[0])**2 + (s['lon'] - point[1])**2
+                if d < min_dist:
+                    min_dist = d
+                    nearest_station = s
+            
+            with cols[i]:
+                st.caption(f"📍 {int(progress*100)}% - {eta.strftime('%H:%M')}")
+                if nearest_station and min_dist < 0.1: # n. 30km säde
+                    name = nearest_station.get('name', 'Asema')
+                    mun = nearest_station.get('municipality')
+                    road = nearest_station.get('road_number')
+                    
+                    loc_str = ""
+                    if mun: loc_str += f"{mun}"
+                    if road: loc_str += f" (Vt {road})"
+                    
+                    if loc_str:
+                        st.markdown(f"**{loc_str}**")
+                        
+                    st.metric(name, f"{nearest_station.get('air_temp')} °C", delta=f"Tie: {nearest_station.get('road_temp')}°C")
+                else:
+                    st.info("Ei sääasemaa lähellä")
