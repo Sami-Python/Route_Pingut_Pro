@@ -19,7 +19,14 @@ pdk.settings.mapbox_api_key = MAPBOX_TOKEN
 
 # 2. Tuodaan funktiot
 from here_client import geocode, route, parse_traffic_incidents
-from digitraffic_client import get_weather_cameras, traffic_messages_near_route
+from digitraffic_client import (
+    get_weather_cameras, 
+    traffic_messages_near_route, 
+    get_road_weather_stations, 
+    get_vms_stations, 
+    get_maintenance_data, 
+    get_lam_stations
+)
 from weather_client import get_rainviewer_data, get_closest_timestamp
 
 # ====================================================================
@@ -54,16 +61,14 @@ def extract_route_summary(route_data: Dict[str, Any]) -> Optional[Tuple[float, f
 # MAP CREATION
 # ====================================================================
 
-# MUUTOS: Lisätty 'digitraffic_incidents' parametri
-def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity):
+def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, 
+               road_weather, vms, maintenance, lam,
+               layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity):
     layers = []
 
     # 1. SÄÄ (Manual Tiling via BitmapLayers)
-    # KORJAUS: Koska TileLayer on rikki, luomme tiilet manuaalisesti Pythonissa
-    # MUUTOS: Näytetään sää vaikka reittiä ei olisi (poistettu 'and coords')
     if layer_settings.get("show_weather") and weather_ts and weather_path and weather_host:
         
-        # Apu-funktiot tiililaskentaan (Web Mercator)
         def deg2num(lat_deg, lon_deg, zoom):
             lat_rad = math.radians(lat_deg)
             n = 2.0 ** zoom
@@ -78,24 +83,16 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
             lat_deg = math.degrees(lat_rad)
             return (lat_deg, lon_deg)
 
-        # 1. Määritä alue (Koko Suomi)
-        # Käytetään kiinteää bboxia, jotta sää näkyy koko maassa
         min_lat, max_lat = 59.0, 71.0
         min_lon, max_lon = 19.0, 33.0
-
-        # 2. Määritä zoom-taso (RainViewer tukee 6)
         zoom = 6
         
-        # 3. Laske tiilialue
-        x_min, y_max = deg2num(min_lat, min_lon, zoom) # Huom: y kasvaa etelään
+        x_min, y_max = deg2num(min_lat, min_lon, zoom)
         x_max, y_min = deg2num(max_lat, max_lon, zoom)
         
-        # Varmistus järjestyksestä
         x_start, x_end = min(x_min, x_max), max(x_min, x_max)
         y_start, y_end = min(y_min, y_max), max(y_min, y_max)
 
-        # 4. Generoi BitmapLayer jokaiselle tiilelle
-        # Rajoitetaan määrää varmuuden vuoksi (ettei tule satoja pyyntöjä)
         max_tiles = 50 
         count = 0
         
@@ -103,9 +100,6 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
             for y in range(y_start, y_end + 1):
                 if count >= max_tiles: break
                 
-                # Laske tiilen bbox (bounds)
-                # num2deg antaa tiilen vasemman yläkulman (NW)
-                # Tarvitsemme [west, south, east, north]
                 nw_lat, nw_lon = num2deg(x, y, zoom)
                 se_lat, se_lon = num2deg(x + 1, y + 1, zoom)
                 
@@ -160,21 +154,20 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
     if point_data:
         layers.append(pdk.Layer("ScatterplotLayer", data=point_data, id="endpoints", get_position="pos", get_color="color", get_radius=800, radius_min_pixels=6, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
-    # 5. HERE HÄIRIÖT (Punainen/Oranssi)
+    # 5. HERE HÄIRIÖT
     if layer_settings.get("show_incidents") and incidents:
         incident_points = [{"pos": [i['lon'], i['lat']], "color": [200, 0, 0] if 'critical' in str(i['taso']) else [255, 140, 0], "name": i['tyyppi']} for i in incidents if i.get('lat')]
         if incident_points:
             layers.append(pdk.Layer("ScatterplotLayer", data=incident_points, id="incidents", get_position="pos", get_color="color", get_radius=600, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=1))
 
-    # 6. DIGITRAFFIC HÄIRIÖT (Syaani - UUSI)
+    # 6. DIGITRAFFIC HÄIRIÖT
     if layer_settings.get("show_incidents") and digitraffic_incidents:
         dt_points = []
         for d in digitraffic_incidents:
-            # Käytetään digitraffic_client.py:n palauttamia avaimia (lat, lon, otsikko)
             if d.get('lat') and d.get('lon'):
                 dt_points.append({
                     "pos": [d['lon'], d['lat']],
-                    "color": [0, 255, 255], # Syaani
+                    "color": [0, 255, 255], 
                     "name": f"FI: {d.get('otsikko', 'Tiedote')}"
                 })
         
@@ -192,7 +185,95 @@ def create_map(coords, incidents, digitraffic_incidents, car_pos, origin_coords,
                 line_width_min_pixels=1
             ))
 
-    # 7. AUTO
+    # 7. TIESÄÄ (Road Weather)
+    if layer_settings.get("show_road_weather") and road_weather:
+        rw_points = []
+        for r in road_weather:
+            temp = r.get("air_temp")
+            color = [200, 200, 200]
+            if temp is not None:
+                if temp < 0: color = [0, 100, 255]
+                elif temp > 0: color = [255, 100, 0]
+            
+            rw_points.append({
+                "pos": [r['lon'], r['lat']],
+                "color": color,
+                "name": f"{r.get('name')}\nIlma: {r.get('air_temp')}°C\nTie: {r.get('road_temp')}°C"
+            })
+        
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=rw_points,
+            id="road_weather",
+            get_position="pos",
+            get_color="color",
+            get_radius=800,
+            pickable=True,
+            stroked=True,
+            get_line_color=[255, 255, 255],
+            line_width_min_pixels=1,
+            radius_min_pixels=4
+        ))
+
+    # 8. VMS (Muuttuvat opasteet)
+    if layer_settings.get("show_vms") and vms:
+        vms_points = [{"pos": [v['lon'], v['lat']], "name": f"Opaste: {v.get('name')}", "color": [255, 0, 255]} for v in vms]
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=vms_points,
+            id="vms",
+            get_position="pos",
+            get_color="color",
+            get_radius=600,
+            pickable=True,
+            stroked=True,
+            get_line_color=[0, 0, 0],
+            line_width_min_pixels=1,
+            radius_min_pixels=4
+        ))
+
+    # 9. LAM (Liikennemäärät)
+    if layer_settings.get("show_lam") and lam:
+        lam_points = [{"pos": [l['lon'], l['lat']], "name": f"{l.get('name')}\nNop: {l.get('speed')} km/h\nMäärä: {l.get('volume')} kpl/h", "color": [0, 255, 100]} for l in lam]
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=lam_points,
+            id="lam",
+            get_position="pos",
+            get_color="color",
+            get_radius=600,
+            pickable=True,
+            stroked=True,
+            get_line_color=[0, 0, 0],
+            line_width_min_pixels=1,
+            radius_min_pixels=4
+        ))
+
+    # 10. KUNNOSSAPITO (Maintenance)
+    if layer_settings.get("show_maintenance") and maintenance:
+        m_paths = []
+        for m in maintenance:
+            geom = m.get("geometry")
+            if geom and geom.get("type") == "MultiLineString":
+                for line in geom.get("coordinates", []):
+                    m_paths.append({"path": line, "name": f"Huolto: {m.get('task')} ({m.get('time')})"})
+            elif geom and geom.get("type") == "LineString":
+                m_paths.append({"path": geom.get("coordinates", []), "name": f"Huolto: {m.get('task')} ({m.get('time')})"})
+        
+        if m_paths:
+            layers.append(pdk.Layer(
+                "PathLayer",
+                data=m_paths,
+                id="maintenance",
+                get_path="path",
+                get_color=[255, 165, 0], # Oranssi
+                width_scale=10,
+                width_min_pixels=2,
+                opacity=0.6,
+                pickable=True
+            ))
+
+    # 11. AUTO
     if layer_settings.get("show_car") and car_pos:
         layers.append(pdk.Layer("ScatterplotLayer", data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}], id="car", get_position="pos", get_color=[0, 100, 255], get_radius=1000, radius_min_pixels=8, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
@@ -218,10 +299,12 @@ def clear_search():
 
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
-keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host", "weather_paths"]
+keys = ["coords", "cameras", "route_summary", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "weather_timestamps", "weather_host", "weather_paths",
+        "road_weather", "vms", "maintenance", "lam"]
+
 for key in keys:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps"] else None
+        st.session_state[key] = [] if key in ["coords", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam"] else None
         if key == "weather_paths": st.session_state[key] = {}
 
 if "ui_default_time" not in st.session_state:
@@ -276,6 +359,10 @@ with st.sidebar:
         "show_weather": st.checkbox("Sade-ennuste", True),
         "show_incidents": st.checkbox("Häiriöt", True),
         "show_cameras": st.checkbox("Kelikamerat 📷", True),
+        "show_road_weather": st.checkbox("Tiesää 🌡️", False),
+        "show_vms": st.checkbox("Opasteet 🛑", False),
+        "show_maintenance": st.checkbox("Kunnossapito 🚜", False),
+        "show_lam": st.checkbox("LAM-pisteet 📊", False),
         "show_car": st.checkbox("Auto", True),
     }
     
@@ -283,8 +370,6 @@ with st.sidebar:
     if layer_settings["show_weather"]:
         weather_opacity = st.slider("Sään läpinäkyvyys", 0.0, 1.0, 0.6, step=0.1)
     
-    # DEBUG MODE REMOVED
-
     st.divider()
     with st.expander("🛠️ Debug: Säädata"):
         if st.session_state.weather_timestamps:
@@ -364,6 +449,12 @@ with b1:
                     st.session_state.cameras = get_weather_cameras(st.session_state.coords)
                     st.session_state.digitraffic_messages = traffic_messages_near_route(st.session_state.coords)
                     
+                    # Uudet haut
+                    st.session_state.road_weather = get_road_weather_stations(st.session_state.coords)
+                    st.session_state.vms = get_vms_stations(st.session_state.coords)
+                    st.session_state.maintenance = get_maintenance_data(st.session_state.coords)
+                    st.session_state.lam = get_lam_stations(st.session_state.coords)
+                    
                     # Haetaan säädata
                     host, ts_dict = get_cached_weather_data()
                     st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
@@ -417,16 +508,19 @@ if st.session_state.coords:
                 w_path = st.session_state.weather_paths.get(w_ts)
             st.caption(f"Sääkartta: {datetime.datetime.fromtimestamp(w_ts).strftime('%H:%M')}")
 
-        # MUUTOS: Välitetään digitraffic_messages create_map:iin
         dt_msgs = st.session_state.get("digitraffic_messages", [])
 
         deck = create_map(coords, 
                           st.session_state.here_incidents, 
-                          dt_msgs, # <--- UUSI
+                          dt_msgs, 
                           car_pos, 
                           st.session_state.origin_coords, 
                           st.session_state.dest_coords, 
-                          st.session_state.cameras, 
+                          st.session_state.cameras,
+                          st.session_state.road_weather,
+                          st.session_state.vms,
+                          st.session_state.maintenance,
+                          st.session_state.lam,
                           layer_settings, 
                           map_style, 
                           w_ts, 
@@ -477,8 +571,9 @@ if st.session_state.coords:
                     if w_ts and st.session_state.weather_paths:
                         w_path = st.session_state.weather_paths.get(w_ts)
 
-                # MUUTOS: Välitetään digitraffic_messages myös silmukassa
-                deck = create_map(coords, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
+                deck = create_map(coords, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, 
+                                  st.session_state.road_weather, st.session_state.vms, st.session_state.maintenance, st.session_state.lam,
+                                  layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
 

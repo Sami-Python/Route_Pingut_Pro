@@ -176,3 +176,255 @@ def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: 
             continue
 
     return cameras
+
+# --------------------------------------------------------------------
+# 3. TIESÄÄ (Road Weather)
+# --------------------------------------------------------------------
+
+def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 2000) -> List[Dict[str, Any]]:
+    """
+    Hakee tiesääasemat ja niiden mittaustiedot reitin varrelta.
+    """
+    if not route_coords:
+        return []
+
+    path_coords_xy = [(p[1], p[0]) for p in route_coords]
+    route_line = LineString(path_coords_xy)
+    
+    # 1. Haetaan asemat (metadata)
+    url_meta = "https://tie.digitraffic.fi/api/weather/v1/stations"
+    # 2. Haetaan data (sensor arvot)
+    url_data = "https://tie.digitraffic.fi/api/weather/v1/stations/data"
+    
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    
+    try:
+        # Haetaan molemmat rinnakkain tai peräkkäin
+        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
+        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        
+        meta_json = resp_meta.json()
+        data_json = resp_data.json()
+    except Exception as e:
+        print(f"Road Weather API error: {e}")
+        return []
+
+    # Luodaan lookup-taulu datalle: id -> {air, road}
+    data_lookup = {}
+    for st_data in data_json.get("stations", []):
+        sid = st_data.get("id")
+        vals = {}
+        for s in st_data.get("sensorValues", []):
+            # 1 = Ilman lämpötila, 3 = Tien pinnan lämpötila
+            if s["id"] == 1: vals["air_temp"] = s["value"]
+            if s["id"] == 3: vals["road_temp"] = s["value"]
+        data_lookup[sid] = vals
+
+    stations = []
+    buffer_degrees = buffer_meters / 111000.0
+    
+    for feature in meta_json.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            coords_raw = geom.get("coordinates", [])
+            if not coords_raw or len(coords_raw) < 2: continue
+            
+            lon, lat = float(coords_raw[0]), float(coords_raw[1])
+            point = Point(lon, lat)
+            
+            if route_line.distance(point) < buffer_degrees:
+                props = feature.get("properties", {})
+                sid = props.get("id")
+                
+                # Haetaan arvot lookupista
+                vals = data_lookup.get(sid, {})
+                
+                stations.append({
+                    "id": sid,
+                    "name": props.get("names", {}).get("fi", "Sääasema"),
+                    "lat": lat,
+                    "lon": lon,
+                    "air_temp": vals.get("air_temp"),
+                    "road_temp": vals.get("road_temp")
+                })
+        except:
+            continue
+
+    return stations
+
+def get_vms_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    if not route_coords: return []
+    
+    path_coords_xy = [(p[1], p[0]) for p in route_coords]
+    route_line = LineString(path_coords_xy)
+    buffer_degrees = buffer_meters / 111000.0
+
+    url = "https://tie.digitraffic.fi/api/variable-sign/v1/signs"
+    headers = { 
+        "User-Agent": "StreamlitApp/1.0 (gzip)",
+        "Accept-Encoding": "gzip"
+    }
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+    except Exception as e:
+        print(f"VMS API error: {e}")
+        return []
+
+    vms_points = []
+    
+    for feature in data.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            c = geom.get("coordinates", [])
+            if not c or len(c) < 2: continue
+            
+            lon, lat = float(c[0]), float(c[1])
+            point = Point(lon, lat)
+            
+            if route_line.distance(point) < buffer_degrees:
+                props = feature.get("properties", {})
+                sid = props.get("id")
+                
+                # Etsitään näyttöteksti
+                display_value = props.get("displayValue")
+                if not display_value:
+                    # Jos ei displayValue, kokeillaan textRows
+                    rows = props.get("textRows", [])
+                    if rows:
+                        display_value = " | ".join([r.get("screenText", "") for r in rows])
+                
+                if not display_value:
+                    display_value = props.get("type", "VMS")
+
+                vms_points.append({
+                    "id": sid,
+                    "lat": lat,
+                    "lon": lon,
+                    "name": f"{display_value}",
+                    "type": props.get("type", "UNKNOWN")
+                })
+        except:
+            continue
+            
+    return vms_points
+
+# --------------------------------------------------------------------
+# 5. KUNNOSSAPITO (Maintenance)
+# --------------------------------------------------------------------
+
+def get_maintenance_data(route_coords: List[Tuple[float, float]], buffer_meters: int = 5000) -> List[Dict[str, Any]]:
+    """
+    Hakee kunnossapitotiedot (esim. auraus) reitin alueelta.
+    """
+    if not route_coords: return []
+    
+    path_coords_xy = [(p[1], p[0]) for p in route_coords]
+    route_line = LineString(path_coords_xy)
+    min_x, min_y, max_x, max_y = route_line.bounds
+    
+    import time
+    end_time = int(time.time() * 1000)
+    start_time = end_time - (12 * 3600 * 1000) 
+    
+    url = f"https://tie.digitraffic.fi/api/maintenance/v1/tracking/routes?endFrom={start_time}&endBefore={end_time}&xMin={min_x-0.1}&yMin={min_y-0.1}&xMax={max_x+0.1}&yMax={max_y+0.1}"
+    headers = { 
+        "User-Agent": "StreamlitApp/1.0 (gzip)",
+        "Accept-Encoding": "gzip"
+    }
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        data = resp.json()
+    except Exception as e:
+        print(f"Maintenance API error: {e}")
+        return []
+        
+    tasks = []
+    for feature in data.get("features", []):
+        try:
+            # Maintenance data on usein MultiLineString
+            geom = shape(feature.get("geometry"))
+            if route_line.distance(geom) < (buffer_meters / 111000.0):
+                props = feature.get("properties", {})
+                tasks.append({
+                    "id": props.get("id"),
+                    "task": props.get("tasks", ["Huolto"])[0],
+                    "time": props.get("endTime"),
+                    "geometry": feature.get("geometry")
+                })
+        except:
+            continue
+            
+    return tasks
+
+# --------------------------------------------------------------------
+# 6. LAM (Liikennemäärät)
+# --------------------------------------------------------------------
+
+def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    if not route_coords: return []
+    
+    path_coords_xy = [(p[1], p[0]) for p in route_coords]
+    route_line = LineString(path_coords_xy)
+    buffer_degrees = buffer_meters / 111000.0
+    
+    # 1. Metadata
+    url_meta = "https://tie.digitraffic.fi/api/tms/v1/stations"
+    # 2. Data
+    url_data = "https://tie.digitraffic.fi/api/tms/v1/stations/data"
+    
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    
+    try:
+        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
+        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        
+        meta_json = resp_meta.json()
+        data_json = resp_data.json()
+    except Exception as e:
+        print(f"LAM API error: {e}")
+        return []
+        
+    # Lookup: id -> {speed, vol}
+    data_lookup = {}
+    for st_data in data_json.get("stations", []):
+        sid = st_data.get("id")
+        vals = {}
+        for s in st_data.get("sensorValues", []):
+            # 5122=Nopeus1, 5169=Nopeus2
+            if s["id"] in [5122, 5169]: vals["speed"] = s["value"]
+            # 5116=Määrä1, 5163=Määrä2
+            if s["id"] in [5116, 5163]: vals["volume"] = s["value"]
+        data_lookup[sid] = vals
+
+    results = []
+    for feature in meta_json.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            c = geom.get("coordinates", [])
+            if not c or len(c) < 2: continue
+            
+            lon, lat = float(c[0]), float(c[1])
+            point = Point(lon, lat)
+            
+            if route_line.distance(point) < buffer_degrees:
+                props = feature.get("properties", {})
+                sid = props.get("id")
+                
+                # Haetaan arvot lookupista
+                vals = data_lookup.get(sid, {})
+                
+                results.append({
+                    "id": sid,
+                    "name": props.get("names", {}).get("fi", "LAM"),
+                    "lat": lat,
+                    "lon": lon,
+                    "speed": vals.get("speed"),
+                    "volume": vals.get("volume")
+                })
+        except:
+            continue
+        
+    return results
