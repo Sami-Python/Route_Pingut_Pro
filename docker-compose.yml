@@ -10,6 +10,9 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Europe/Helsinki
+    networks:
+      - default
+      - meteo-network  # Connect to Open-Meteo network
 
   streamlit:
     build:
@@ -22,6 +25,15 @@ services:
       - TZ=Europe/Helsinki
     depends_on:
       - api
+    networks:
+      - default
+      - meteo-network
+
+# Define external network reference
+networks:
+  meteo-network:
+    external: true
+    name: open_meteo_meteo-network  # Reference to testi_meteo's network
 
   #mkdocs-prod:
   #  # Rakentaa imagen projektin juuresta (käyttää Dockerfileä)
