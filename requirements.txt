@@ -1,9 +1,18 @@
+<<<<<<< requirements.txt
+flexpolyline
+streamlit
+pydeck
+streamlit-js-eval
+pydantic
+shapely
+httpx
+pytest
 icalevents
 icalendar
-streamlit
 streamlit-calendar
 fastapi
 uvicorn
 requests
 msal
 python-dotenv
+>>>>>>> requirements.txt
