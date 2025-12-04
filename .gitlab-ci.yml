@@ -1,18 +1,17 @@
-# You can override the included template(s) by including variable overrides
-# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
-# Secret Detection customization: https://docs.gitlab.com/user/application_security/secret_detection/pipeline/configure
-# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
-# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
-# Note that environment variables can be set in several places
-# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 stages:
-- test
-- secret-detection
-sast:
-  stage: test
-include:
-- template: Security/Secret-Detection.gitlab-ci.yml
-variables:
-  SECRET_DETECTION_ENABLED: 'true'
-secret_detection:
-  stage: secret-detection
+  - deploy # Mandatory name for the stage to GitLab detect it's a Pages deployment
+
+# Pages Deployment
+pages:
+  tags:
+    - dind
+  stage: deploy
+  # Debian 12 (Bookworm), LTS till 2028, with uv package manager
+  image: ghcr.io/astral-sh/uv:python3.12-bookworm
+  script: 
+    - uv pip install -r docs/doc-requirements.txt --system
+    - uv run --directory "docs" mkdocs build --verbose --site-dir "../public"
+  pages: true # publishes the default public directory
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH   # Deploy only on main branch
+

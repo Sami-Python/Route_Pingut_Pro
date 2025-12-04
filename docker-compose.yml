@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: api.Dockerfile
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Helsinki
+
+  streamlit:
+    build:
+      context: .
+      dockerfile: strmlt.Dockerfile
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Helsinki
+    depends_on:
+      - api
+
+  #mkdocs-prod:
+  #  # Rakentaa imagen projektin juuresta (käyttää Dockerfileä)
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile
+#
+  #  # nimi kontille
+  #  container_name: mkdocs-docs
+#
+  #  # Julkaistaan Nginx-portti ulos
+  #  # Jos .env-tiedostossa on MKDOCS_PORT, käytetään sitä, muuten 8080
+  #  ports:
+  #    - "${MKDOCS_PORT:-8080}:80"
+#
+  #  # Käynnistyy automaattisesti uudelleen, ellei pysäytetä käsin
+  #  restart: unless-stopped
+#
+  #  # Aikavyöhyke lokeihin jne.
+  #  environment:
+  #    - TZ=Europe/Helsinki

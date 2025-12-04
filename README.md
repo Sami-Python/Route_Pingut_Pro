@@ -1,158 +1,106 @@
-# Reitti Pro 🚗
+## Alustava ominaisuuksien määrittely
 
-Suomalainen reititys- ja liikennetietosovellus, joka yhdistää HERE API:n, Digitrafficin ja RainViewerin reaaliaikaiset tiedot.
+Autoilijan opas
+- Määritä reitti
+- Ilmatieteenlaitos sää + varoitukset
+- Fintraff kuvat reitiltä, tienpinta, ennuste
+- Ajoneuvojen määrä, keskinopeus
+- Tietyöt
+- Liikenneonnettomuudet
+- Google Maps API ruuhkatilanne?
 
-## Ominaisuudet
+## Arviointi
 
-### 🗺️ Streamlit-sovellus (app.py)
-- **Dynaaminen reititys** HERE API:lla
-- **3D-karttanäkymä** Pydeck-kirjastolla
-- **Reaaliaikaiset häiriötiedot** (HERE + Digitraffic)
-- **Sade-ennuste** koko Suomen alueelle (RainViewer)
-- **Kelikamerat** reitin varrelta (Digitraffic)
-- **Autoanimaatio** reitin varrella
-- **GPS-sijainti** selaimesta
-- **Korkeuprofiili** reitille
+Koska toimeksiannot vaihtelevat laajudeltaan ja sisällöltään jonkin verran, kurssi arvioidaan Hyväksytty / Hylätty. Hyväksyttyyn arvosanaan riittävät kriteerit mukailevat Scrum-kehitysprosessia, sekä aiemmissa projekteissa käytettyjä dokumentointikäytäntöjä:
 
-### 🚀 FastAPI Backend (api_server.py)
-REST API reitti- ja liikennetiedoille:
-- Geokoodaus (osoite → koordinaatit)
-- Reitin haku ja optimointi
-- Kelikamerat
-- Liikennetiedotteet
-- Tiesääasemat
-- Muuttuvat opasteet (VMS)
-- Kunnossapitotehtävät
-- LAM-mittauspisteet
-- Säätiilien metatiedot
+    TYÖAIKA: Projektin kokonaisajankäytön tulee olla välillä 90-150 tuntia per opiskelija, ja työaika tulee olla todennettavissa työajanseurannan avulla (clockify.me).
 
-## Asennus
+    TEHTÄVÄT: Riittävä määrä projektin tavoitteiden mukaisia tehtäviä (issues) tulee olla avattu, käsitelty ja suljettu sprinttien aikana. Tehtävien määrä ja laajuus arvioidaan projektin vaatimusten mukaisesti. Hyvä nyrkkisääntö on tehtävä (issue) per työpäivä. Enemmänkin se voi olla.
 
-### 1. Kloonaa repositorio
-```bash
-git clone https://gitlab.dclabra.fi/Sami/here_api.git
-cd here_api
-```
+    DOKUMENTAATIO: Projektin dokumentaation tulee kattaa ainakin työn kulku, valitut teknologiat ja arkkitehtuuri sekä merkittävät päätökset ja perustelut niiden taustalla. Dokumentoitavia asioita ovat:
+        vaatimusmäärittely,
+        testaussuunnitelma,
+        rajapintakuvaus,
+        mikropalvelun käyttöohje ja
+        Scrum-seremonioiden raportointi ryhmän blogiin (dokumenttipohja)
+            suunnittelupalaverit
+            dailyt
+            muut
 
-### 2. Luo virtuaaliympäristö
-```bash
-python -m venv .venv
-source .venv/Scripts/activate  # Windows
-# tai
-source .venv/bin/activate      # Linux/Mac
-```
+    DEMOT: Projektin väli- ja loppudemo, sekä aktiivinen osallistuminen muiden ryhmien demoihin.
 
-### 3. Asenna riippuvuudet
-```bash
-pip install -r requirements.txt
-```
+    OPPIMISPÄIVÄKIRJA: Jäsenten tulee pitää henkilökohtaista oppimispäiväkirjaa, jossa he reflektoivat oppimiskokemuksia, haasteita ja projektin aikana tehtyjä oivalluksia. Oppimispäiväkirjasta tulee löytyä projektissa käytetty työaika, sekä yhteenveto tekemistäsi tehtävistä.
 
-### 4. Konfiguroi API-avaimet
-Luo `.env`-tiedosto projektin juureen:
-```env
-HERE_API_KEY=your_here_api_key
-MAPBOX_TOKEN=your_mapbox_token
-```
+Dokumentoinnissa ja raportoinnissa pyritään riittävän hyvään - ei lähdetä rakentamaan näistä liian raskasta prosessia.
 
-**API-avainten hankkiminen:**
-- HERE API: https://developer.here.com/
-- Mapbox: https://www.mapbox.com/
+## Linkkejä
 
-## Käyttö
+- Ryhmän blogi: https://gitlab.dclabra.fi/wiki/gVgp2Z4WSLugvnE6BPzltw?view
 
-### Streamlit-sovellus
-```bash
-streamlit run app.py --server.port 8502
-```
-Avaa selaimessa: http://localhost:8502
+## Arkkitehtuuri
 
-### FastAPI-palvelin
-```bash
-python api_server.py
-```
-- API: http://localhost:8000
-- Swagger-dokumentaatio: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+![arkkitehtuuri](./img/arkkitehtuuri.png)
+
+## Kalenteri API demo
+
+HUOM! MkDocs kontti ei toimi tässä haarassa
 
 ### Docker
-```bash
-docker build -t reitti-pro .
-docker run -p 8502:8502 --env-file .env reitti-pro
+
+```docker compose up --build -d```
+
+Kaksi konttia käynnistyy. Toisessa fastapi toteutus (localhost:8000) ja toisessa streamlit (localhost:8501)
+
+### FastAPI
+
+FastAPI:n dokumentaatioon pääset käsiksi: http://localhost:8000/docs
+
+### Streamlit
+
+Streamlit ympäristöön pääset käsiksi: http://localhost:8501
+
+### Kalenteri
+
+Voit kokeilla oman lukkarin tiedoston hakua tai käyttää tätä linkkiä esimerkkinä: 
+https://lukkarit.kamk.fi/ical.php?hash=E74AC94AE7A19AC99110C39EE535C0DBB0DF8AAE
+
+
+
+
+## MkDocs + Nginx (Docker) lyhyet käyttöohjeet
+
+- Dockerfile rakentaa MkDocs-sivuston (mkdocs build) pakkaa valmiit HTML-sivut Nginx-palvelimeen
+- nginx.conf määrittää miten Nginx palvelee staattisia sivuja.
+- docker-compose.yml / käyttää automaattista uudelleenkäynnistystä
+- käyttää porttia .env-tiedostosa
+
+**Buildaa konntti**
+```
+docker compose build
 ```
 
-## Projektin rakenne
-
+**Käynnistä Docker**
 ```
-here_api/
-├── app.py                    # Streamlit-sovellus
-├── api_server.py             # FastAPI REST API
-├── here_client.py            # HERE API -integraatio
-├── digitraffic_client.py     # Digitraffic API -integraatio
-├── weather_client.py         # RainViewer API -integraatio
-├── requirements.txt          # Python-riippuvuudet
-├── Dockerfile               # Docker-konfiguraatio
-├── .env                     # API-avaimet (ei versionhallinnassa)
-└── docs/                    # Dokumentaatio
-    ├── app.md               # Sovelluksen kehityshistoria
-    ├── here_api.md          # HERE API -ohje
-    ├── fastapi_ohje.md      # FastAPI-ohje
-    └── docker_ohje.md       # Docker-ohje
+docker compose up -d
+```
+Localhost ->
+```
+http://localhost:8080
 ```
 
-## Teknologiat
+*Kun muokkaat MkDocsia, buildaa ja käynnistä kontti uudellen*
 
-### Backend
-- **Python 3.11+**
-- **FastAPI** - REST API
-- **Uvicorn** - ASGI-palvelin
-- **Requests** - HTTP-pyynnöt
-- **Shapely** - Geometrinen laskenta
-
-### Frontend
-- **Streamlit** - Web-sovelluskehys
-- **Pydeck** - 3D-karttavisualisointi
-- **Flexpolyline** - Reittiviivan dekoodaus
-
-### API-integraatiot
-- **HERE API** - Reititys ja geokoodaus
-- **Digitraffic** - Kelikamerat ja liikennetiedotteet
-- **RainViewer** - Sadekartat
-
-## Dokumentaatio
-
-Lisää dokumentaatiota löytyy `docs/`-kansiosta:
-- [Sovelluksen kehitys](docs/app.md)
-- [HERE API -ohje](docs/here_api.md)
-- [FastAPI-ohje](docs/fastapi_ohje.md)
-- [Docker-ohje](docs/docker_ohje.md)
-
-## Kehitys
-
-### Testaus
-```bash
-# API-testit
-python debug/API_test.py
-python debug/API_digi_test.py
-
-# FastAPI:n rakennetesti (juuren test_api.py)
-python test_api.py
+Sammuta
 ```
-
-### CI/CD
-Projekti käyttää GitLab CI/CD:tä (`.gitlab-ci.yml`)
-
-## Lisenssi
-
-Projekti on kehitetty opetus- ja demonstraatiotarkoituksiin.
-
-## Tekijät
-
-- Sami - Pääkehittäjä
-
-## Versiohistoria
-
-- **v1.0** - Perusreititys ja kartta
-- **v1.1** - Kelikamerat ja häiriötiedot
-- **v1.2** - Sade-ennuste koko Suomelle
-- **v1.3** - FastAPI REST API
-- **v1.4** - Laajennettu Digitraffic-tuki (Tiesää, VMS, Kunnossapito, LAM) ja sääreititys
+docker compose stop
+```
+Poista kontti
+```
+docker compose down
+```
+Mikäli jotain jää kummittelemaan aja
+```
+docker compose down --volumes --remove-orphans
+docker compose build
+docker compose up -d
+```

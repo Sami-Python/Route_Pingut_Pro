@@ -1,14 +1,18 @@
-streamlit
-requests
+<<<<<<< requirements.txt
 flexpolyline
-python-dotenv
+streamlit
 pydeck
 streamlit-js-eval
-fastapi
-uvicorn[standard]
 pydantic
 shapely
 httpx
 pytest
-
-
+icalevents
+icalendar
+streamlit-calendar
+fastapi
+uvicorn
+requests
+msal
+python-dotenv
+>>>>>>> requirements.txt

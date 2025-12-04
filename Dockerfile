@@ -1,16 +1,25 @@
-# Streamlit + docs Dockerfile
-FROM python:3.11-slim
 
-WORKDIR /app
+FROM squidfunk/mkdocs-material AS builder
 
-# Kopioi koodi ja docs
-COPY . /app
 
-# Asenna riippuvuudet uv:llä
-RUN pip install --upgrade pip && pip install uv
-RUN uv pip install --system -r requirements.txt
+WORKDIR /docs
 
-# Streamlit portti 8502
-EXPOSE 8502
+# Kopioi koko projekti (mkdocs.yml, docs/, img/, jne.)
+COPY . .
 
-CMD ["streamlit", "run", "app.py", "--server.port=8502", "--server.headless=true"]
+# staattinen sivusto kansioon /site
+RUN mkdocs build --clean --site-dir /site
+
+
+# 2. Nginx vaihe
+FROM nginx:alpine
+
+# Korvataan Nginxin oletuskonffi
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Kopioidaan rakennettu sivusto Nginxin juureen
+COPY --from=builder /site /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]
