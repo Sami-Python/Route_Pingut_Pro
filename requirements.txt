@@ -8,3 +8,7 @@ fastapi
 uvicorn[standard]
 pydantic
 shapely
+httpx
+pytest
+
+

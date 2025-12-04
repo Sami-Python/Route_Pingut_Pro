@@ -133,6 +133,9 @@ Lisää dokumentaatiota löytyy `docs/`-kansiosta:
 # API-testit
 python debug/API_test.py
 python debug/API_digi_test.py
+
+# FastAPI:n rakennetesti (juuren test_api.py)
+python test_api.py
 ```
 
 ### CI/CD
