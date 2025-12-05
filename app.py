@@ -328,11 +328,11 @@ def clear_search():
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
 keys = ["all_routes", "route_summaries", "selected_route_index", "cameras", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "selected_station", "weather_timestamps", "weather_host", "weather_paths",
-        "road_weather", "vms", "maintenance", "lam"]
+        "road_weather", "vms", "maintenance", "lam", "data_by_route"]
 
 for key in keys:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam"] else None
+        st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam", "data_by_route"] else None
         if key == "weather_paths": st.session_state[key] = {}
         if key == "selected_route_index": st.session_state[key] = 0
 
@@ -437,12 +437,34 @@ with st.sidebar:
         st.write(f"Host: {st.session_state.weather_host}")
         st.write(f"Paths count: {len(st.session_state.weather_paths) if st.session_state.weather_paths else 0}")
 
+    # Korkeusprofiili sidebarissa
+    if st.session_state.all_routes and st.session_state.selected_route_index < len(st.session_state.all_routes):
+        st.divider()
+        st.subheader("⛰️ Reitin korkeusprofiili")
+        coords = st.session_state.all_routes[st.session_state.selected_route_index]
+        chart_data = []
+        has_elevation = len(coords[0]) > 2
+        for p in coords:
+            val = p[2] if has_elevation else 0
+            chart_data.append(val)
+        
+        if has_elevation:
+            st.area_chart(chart_data, color="#ffaa00", width='stretch')
+        else:
+            st.info("Ei korkeusdataa.")
+
 # --- INPUTS ---
 c1, c2, c3 = st.columns(3)
 search_disabled = False
 
 with c1:
-    use_gps = st.checkbox("Käytä GPS-sijaintia")
+    # Haetaan checkboxin tila session statesta, jotta voimme disabloida inputin ennen checkboxin renderöintiä
+    gps_enabled = st.session_state.get("use_gps_checkbox", False)
+    
+    origin = st.text_input("Lähtö", "Helsinki", disabled=gps_enabled)
+    
+    use_gps = st.checkbox("Käytä GPS-sijaintia", key="use_gps_checkbox")
+    
     if use_gps:
         if st.session_state.current_location:
              lat, lon = st.session_state.current_location
@@ -455,7 +477,6 @@ with c1:
              else:
                  st.caption("⏳ Odotetaan GPS...")
                  search_disabled = True
-    origin = st.text_input("Lähtö", "Helsinki", disabled=use_gps)
 
 with c2:
     dest = st.text_input("Määränpää", "Tampere")
@@ -503,15 +524,44 @@ with b1:
                     
                     # Käytetään ekaa reittiä metadatan hakuun
                     if st.session_state.all_routes:
-                        first_route_coords = st.session_state.all_routes[0]
-                        st.session_state.here_incidents = parse_traffic_incidents(r_data) # Tämä parsii kaikki, mutta visualisointi voi olla haastavaa
-                        st.session_state.cameras = get_weather_cameras(first_route_coords)
-                        st.session_state.digitraffic_messages = traffic_messages_near_route(first_route_coords)
+                        st.session_state.here_incidents = parse_traffic_incidents(r_data)
+
+                        # Collect data for EACH route separately
+                        # Collect data for EACH route separately
+                        st.session_state.data_by_route = []
+
+                        progress_bar = st.progress(0, text="Haetaan tietoja reiteille...")
                         
-                        st.session_state.road_weather = get_road_weather_stations(first_route_coords)
-                        st.session_state.vms = get_vms_stations(first_route_coords)
-                        st.session_state.maintenance = get_maintenance_data(first_route_coords)
-                        st.session_state.lam = get_lam_stations(first_route_coords)
+                        # Pre-fetch data ONCE
+                        with st.spinner("Ladataan Digitraffic-dataa..."):
+                            from digitraffic_client import (
+                                fetch_weather_cam_data, filter_weather_cameras,
+                                fetch_road_weather_data, filter_road_weather_stations,
+                                fetch_vms_data, filter_vms_stations,
+                                fetch_lam_data, filter_lam_stations
+                            )
+                            # Fetch raw data
+                            cam_data = fetch_weather_cam_data()
+                            rw_meta, rw_data = fetch_road_weather_data()
+                            vms_data = fetch_vms_data()
+                            lam_meta, lam_data = fetch_lam_data()
+                            
+                        total_routes = len(st.session_state.all_routes)
+
+                        for idx, route_coords in enumerate(st.session_state.all_routes):
+                            # Filter locally using pre-fetched data
+                            route_data = {
+                                "cameras": filter_weather_cameras(route_coords, cam_data),
+                                "digitraffic_messages": traffic_messages_near_route(route_coords), # Still per route (API filtered)
+                                "road_weather": filter_road_weather_stations(route_coords, rw_meta, rw_data),
+                                "vms": filter_vms_stations(route_coords, vms_data),
+                                "maintenance": get_maintenance_data(route_coords), # Still per route (time/bbox dependent)
+                                "lam": filter_lam_stations(route_coords, lam_meta, lam_data)
+                            }
+                            st.session_state.data_by_route.append(route_data)
+                            progress_bar.progress((idx + 1) / total_routes)
+
+                        progress_bar.empty()
                     
                     # Haetaan säädata
                     host, ts_dict = get_cached_weather_data()
@@ -552,6 +602,22 @@ if st.session_state.all_routes:
     
     coords = st.session_state.all_routes[st.session_state.selected_route_index]
     
+    # Get data for selected route
+    current_route_data = {}
+    if "data_by_route" in st.session_state and len(st.session_state.data_by_route) > st.session_state.selected_route_index:
+        current_route_data = st.session_state.data_by_route[st.session_state.selected_route_index]
+
+    cameras = current_route_data.get("cameras", [])
+    dt_msgs = current_route_data.get("digitraffic_messages", [])
+    road_weather = current_route_data.get("road_weather", [])
+    vms = current_route_data.get("vms", [])
+    maintenance = current_route_data.get("maintenance", [])
+    lam = current_route_data.get("lam", [])
+
+    st.session_state.cameras = cameras
+    st.session_state.digitraffic_messages = dt_msgs
+    st.session_state.road_weather = road_weather # Update session state for other components using these
+
     if st.session_state.route_summaries[st.session_state.selected_route_index]:
         dist, dur_traffic, dur_base = st.session_state.route_summaries[st.session_state.selected_route_index]
         dur = dur_traffic if use_traffic else dur_base
@@ -564,7 +630,7 @@ if st.session_state.all_routes:
     m3.metric("Lähtö", st.session_state.dep_dt.strftime("%H:%M"))
     m4.metric("Perillä", (st.session_state.dep_dt + datetime.timedelta(hours=dur)).strftime("%H:%M"))
 
-    col_map, col_chart = st.columns([2, 1])
+    col_map = st.container()
     
     with col_map:
         map_placeholder = st.empty()
@@ -588,8 +654,6 @@ if st.session_state.all_routes:
                 w_path = st.session_state.weather_paths.get(w_ts)
             st.caption(f"Sääkartta: {datetime.datetime.fromtimestamp(w_ts).strftime('%H:%M')}")
 
-        dt_msgs = st.session_state.get("digitraffic_messages", [])
-
         deck = create_map(st.session_state.all_routes, 
                           st.session_state.selected_route_index,
                           st.session_state.here_incidents, 
@@ -597,11 +661,11 @@ if st.session_state.all_routes:
                           car_pos, 
                           st.session_state.origin_coords, 
                           st.session_state.dest_coords, 
-                          st.session_state.cameras,
-                          st.session_state.road_weather,
-                          st.session_state.vms,
-                          st.session_state.maintenance,
-                          st.session_state.lam,
+                          cameras,
+                          road_weather,
+                          vms,
+                          maintenance,
+                          lam,
                           layer_settings, 
                           map_style, 
                           w_ts, 
@@ -668,36 +732,62 @@ if st.session_state.all_routes:
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
 
-    with col_chart:
-        st.subheader("Profiili")
-        chart_data = []
-        has_elevation = len(coords[0]) > 2
-        for p in coords:
-            val = p[2] if has_elevation else 0
-            chart_data.append(val)
-        if has_elevation:
-            st.area_chart(chart_data, color="#ffaa00", width="stretch")
-        else:
-            st.info("Ei korkeusdataa.")
-            st.progress(t_val / total_mins)
-
     st.divider()
     c1, c2 = st.columns(2)
     with c1:
+        st.subheader("Häiriöt")
         if st.session_state.here_incidents:
-            st.subheader("Häiriöt")
-            for inc in st.session_state.here_incidents:
-                with st.expander(f"{inc.get('tyyppi')}"):
-                    st.write(inc.get("kuvaus"))
+            # Luodaan uniikit avaimet dropdownille (Tyyppi + Kuvaus lyhenne)
+            here_opts = []
+            for i, inc in enumerate(st.session_state.here_incidents):
+                # Yritetään kaivaa fiksu otsikko
+                desc = inc.get("kuvaus", "")
+                short_desc = (desc[:40] + '..') if len(desc) > 40 else desc
+                
+                # Lisätään sijainti (koordinaatit) otsikkoon
+                lat = inc.get("lat")
+                lon = inc.get("lon")
+                loc_str = f"({lat:.3f}, {lon:.3f})" if lat and lon else ""
+                
+                label = f"{inc.get('tyyppi')} {loc_str} - {short_desc}"
+                here_opts.append(label)
+            
+            selected_here_idx = st.selectbox("Valitse häiriö", range(len(here_opts)), format_func=lambda x: here_opts[x], key="here_sel")
+            
+            if selected_here_idx is not None:
+                sel_inc = st.session_state.here_incidents[selected_here_idx]
+                st.info(f"**{sel_inc.get('tyyppi')}**")
+                st.write(sel_inc.get("kuvaus"))
+                if sel_inc.get("lat"):
+                    st.caption(f"Sijainti: {sel_inc.get('lat'):.4f}, {sel_inc.get('lon'):.4f}")
+        else:
+            st.info("Ei häiriöitä tai tietöitä reitillä.")
+
     with c2:
+        st.subheader("Digitraffic tiedotteet")
         if st.session_state.digitraffic_messages:
-            st.subheader("Digitraffic tiedotteet")
+            dt_opts = []
             for msg in st.session_state.digitraffic_messages:
-                with st.expander(f"🇫🇮 {msg.get('otsikko')}"):
-                    st.write(msg.get("kuvaus"))
+                # Otsikko + Sijainti
+                loc = msg.get("sijainti", "")
+                title = msg.get("otsikko", "Tiedote")
+                label = f"{title} ({loc})" if loc else title
+                dt_opts.append(label)
+                
+            selected_dt_idx = st.selectbox("Valitse tiedote", range(len(dt_opts)), format_func=lambda x: dt_opts[x], key="dt_sel")
+            
+            if selected_dt_idx is not None:
+                sel_msg = st.session_state.digitraffic_messages[selected_dt_idx]
+                st.info(f"🇫🇮 {sel_msg.get('otsikko')}")
+                st.write(sel_msg.get("kuvaus"))
+                st.caption(f"Alue: {sel_msg.get('sijainti', 'Ei tarkkaa sijaintia')}")
+                if sel_msg.get("aika"):
+                    st.caption(f"Päivitetty: {sel_msg.get('aika')}")
+        else:
+            st.info("Ei aktiivisia liikennetiedotteita.")
 
     st.divider()
-    st.subheader("🌤️ Sääennuste reitille (Arvio)")
+    st.subheader("🌤️ Sää reitillä nyt ")
     
     if st.session_state.all_routes and st.session_state.road_weather:
         route_points = st.session_state.all_routes[st.session_state.selected_route_index]
