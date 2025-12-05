@@ -22,6 +22,9 @@ from digitraffic_client import (
     get_road_weather_history
 )
 from weather_client import get_rainviewer_data, get_closest_timestamp
+import requests
+from ics import Calendar
+import arrow
 
 # ====================================================================
 # PYDANTIC MODELS (Request/Response)
@@ -82,6 +85,12 @@ class RainViewerResponse(BaseModel):
     host: str
     timestamps: List[int]
     count: int
+
+class CalendarEvent(BaseModel):
+    title: str
+    start: str
+    end: str
+    location: Optional[str] = None
 
 # ====================================================================
 # FASTAPI APP
@@ -277,6 +286,44 @@ def api_closest_timestamp(
         return {"target": target, "closest": closest}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Virhe aikaleiman parsinnassa: {e}")
+
+# ====================================================================
+# ENDPOINTS - CALENDAR
+# ====================================================================
+
+@app.get("/ical/events", response_model=List[CalendarEvent], tags=["Calendar"])
+def get_ical_events(url: str = Query(..., description="iCal-tiedoston URL")):
+    """
+    Hakee ja parsii tapahtumat iCal-URL:sta (sisältää toistuvat).
+    """
+    try:
+        from icalevents.icalevents import events as fetch_events
+        import datetime
+        
+        # Haetaan tapahtumat: mennyt viikko -> +2kk
+        start = datetime.datetime.now() - datetime.timedelta(days=7)
+        end = datetime.datetime.now() + datetime.timedelta(days=60)
+        
+        # icalevents hoitaa latauksen ja parsinnan
+        ical_evts = fetch_events(url=url, start=start, end=end)
+        
+        events = []
+        for e in ical_evts:
+            # e.start on datetime (voi olla timezonella)
+            events.append(CalendarEvent(
+                title=e.summary or "No Title",
+                start=str(e.start),
+                end=str(e.end),
+                location=e.location
+            ))
+            
+        # Järjestetään ajan mukaan
+        events.sort(key=lambda x: x.start)
+            
+        return events
+    except Exception as e:
+        print(f"Calendar error: {e}")
+        raise HTTPException(status_code=500, detail=f"Virhe kalenterin haussa: {str(e)}")
 
 # ====================================================================
 # ROOT

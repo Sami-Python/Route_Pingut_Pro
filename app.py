@@ -6,10 +6,11 @@ import time
 import math
 import pydeck as pdk
 from pydeck.data_utils import compute_view
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 import os
 from streamlit_js_eval import get_geolocation
 import requests
+from streamlit_calendar import calendar
 
 # 1. Ladataan ympäristömuuttujat
 load_dotenv()
@@ -29,6 +30,37 @@ from digitraffic_client import (
     get_road_weather_history
 )
 from weather_client import get_rainviewer_data, get_closest_timestamp
+
+# ====================================================================
+# CALENDAR HELPERS
+# ====================================================================
+
+@st.cache_data(ttl=600)
+def _add_ical_events(url: str):
+    """Hakee tapahtumat annetusta iCal-URL:sta."""
+    events = []
+    try:
+        # Tässä oletetaan, että meillä on joku API endpoint joka palauttaa JSONia iCal URLista
+        # Mutta koska api_server.py:ssä on /ical/events, käytetään sitä jos mahdollista.
+        # Oletetaan, että api_server on pystyssä localhost:8000.
+        resp = requests.get("http://localhost:8000/ical/events", params={"url": url}, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            for event in data:
+                evt = {
+                    "title": event.get("title", "No Title"),
+                    "start": event.get("start"),
+                    "end": event.get("end"),
+                    "extendedProps": {
+                        "location": event.get("location")
+                    }
+                }
+                if event.get("location"):
+                    evt["title"] += f" (@ {event.get('location')})"
+                events.append(evt)
+    except Exception as e:
+        print(f"Calendar fetch error: {e}")
+    return events
 
 # ====================================================================
 # API WRAPPERS
@@ -334,7 +366,14 @@ for key in keys:
     if key not in st.session_state:
         st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam", "data_by_route"] else None
         if key == "weather_paths": st.session_state[key] = {}
+        if key == "weather_paths": st.session_state[key] = {}
         if key == "selected_route_index": st.session_state[key] = 0
+
+# Alustetaan input-kenttien sessiomuuttujat, jos ne puuttuvat
+if "dest_input" not in st.session_state:
+    st.session_state.dest_input = "Tampere"
+if "date_input" not in st.session_state:
+    st.session_state.date_input = datetime.date.today()
 
 if "ui_default_time" not in st.session_state:
     st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
@@ -353,6 +392,115 @@ if not MAPBOX_TOKEN:
 
 # --- SIDEBAR ---
 with st.sidebar:
+    # --- KALENTERI ---
+    with st.expander("📅 Kalenteri", expanded=True):
+        env_ical = os.getenv("ICAL_URL")
+        
+        # Tila: Muokataanko vai näytetäänkö tallennettu
+        if "edit_ical" not in st.session_state:
+            st.session_state.edit_ical = False
+            
+        if env_ical and not st.session_state.edit_ical:
+            st.success("✅ Kalenteri yhdistetty.")
+            if st.button("Vaihda osoite"):
+                st.session_state.edit_ical = True
+                st.rerun()
+            target_url = env_ical
+        else:
+            # Ei tallennettua tai muokkaustila
+            ical_input = st.text_input("iCal URL", value=env_ical if env_ical else "", type="password", placeholder="Liitä iCal-osoite tähän...")
+            
+            if st.button("Tallenna"):
+                if ical_input:
+                    # Tallenna .env tiedostoon
+                    env_path = os.path.join(os.getcwd(), ".env")
+                    set_key(env_path, "ICAL_URL", ical_input)
+                    os.environ["ICAL_URL"] = ical_input # Päivitä myös nykyiseen prosessiin
+                    st.session_state.edit_ical = False
+                    st.success("Tallennettu!")
+                    time.sleep(1)
+                    st.rerun()
+            
+            # Käytetään syötettä tai demoa esikatseluun
+            target_url = ical_input if ical_input and ical_input.strip() else "https://lukkarit.kamk.fi/ical.php?hash=E74AC94AE7A19AC99110C39EE535C0DBB0DF8AAE"
+            if not ical_input:
+                 st.caption("Käytetään oletus/demo kalenteria.")
+        
+        if st.button("🔄 Päivitä kalenteri"):
+            _add_ical_events.clear()
+            st.rerun()
+
+        events = _add_ical_events(target_url)
+        if not events:
+            st.info("Ei tapahtumia tai yhteysvirhe.")
+        else:
+            calendar_options = {
+                "headerToolbar": {
+                    "left": "today prev,next",
+                    "center": "title",
+                    "right": "dayGridMonth,timeGridWeek"
+                },
+                "initialView": "timeGridWeek",
+                "slotMinTime": "06:00:00",
+                "slotMaxTime": "22:00:00",
+                "height": 400,
+                "buttonText": {
+                    "today": "Tänään",
+                    "month": "Kk",
+                    "week": "Vko",
+                    "day": "Pv"
+                }
+            }
+            
+            # CSS kustomointi kalenterin painikkeille
+            st.markdown("""
+                <style>
+                .fc-button {
+                    padding: 2px 5px !important;
+                    font-size: 0.8em !important;
+                }
+                .fc-toolbar-title {
+                    font-size: 1em !important;
+                }
+                </style>
+            """, unsafe_allow_html=True)
+            cal_state = calendar(events=events, options=calendar_options, key="sidebar_cal", callbacks=['eventClick'])
+            
+            if cal_state.get("eventClick"):
+                event = cal_state["eventClick"]["event"]
+                title = event.get("title", "")
+                start_str = event.get("start", "")
+                
+                # Parsitaan sijainti
+                location = event.get("extendedProps", {}).get("location")
+                if not location and " (@" in title:
+                    parts = title.split(" (@")
+                    if len(parts) > 1:
+                        location = parts[1].replace(")", "")
+                
+                # Prevent infinite rerun loop
+                # Check if we already processed this click
+                click_id = f"{event.get('title')}_{start_str}"
+                last_click = st.session_state.get("last_cal_click")
+                
+                if click_id != last_click:
+                    st.session_state["last_cal_click"] = click_id
+                    
+                    if location:
+                        st.session_state["dest_input"] = location
+                        st.toast(f"Määränpää asetettu: {location}")
+                    
+                    if start_str:
+                        try:
+                            # start_str is often ISO string
+                            dt = datetime.datetime.fromisoformat(start_str)
+                            st.session_state["date_input"] = dt.date()
+                            st.session_state["time_sel"] = dt.time()
+                            st.toast(f"Aika asetettu: {dt.strftime('%H:%M')}")
+                        except Exception as e:
+                            print(f"Date parse error: {e}")
+
+
     if st.session_state.selected_camera:
         cam = st.session_state.selected_camera
         st.success(f"📸 {cam.get('name', 'Kelikamera')}")
@@ -479,11 +627,13 @@ with c1:
                  search_disabled = True
 
 with c2:
-    dest = st.text_input("Määränpää", "Tampere")
+    dest = st.text_input("Määränpää", "Tampere", key="dest_input")
+    # Debug: Check value after rendering
+    st.caption(f"State dest: {st.session_state.get('dest_input')}")
 
 with c3:
     col_d, col_t = st.columns(2)
-    with col_d: date_val = st.date_input("Päivä", datetime.date.today())
+    with col_d: date_val = st.date_input("Päivä", datetime.date.today(), key="date_input")
     with col_t: time_val = st.time_input("Kello", st.session_state.ui_default_time, key="time_sel")
     dep_dt_naive = datetime.datetime.combine(date_val, time_val)
     dep_iso = dep_dt_naive.astimezone().isoformat(timespec="seconds")
