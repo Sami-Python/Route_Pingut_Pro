@@ -1,4 +1,3 @@
-<<<<<<< requirements.txt
 flexpolyline
 streamlit
 pydeck
@@ -16,4 +15,4 @@ requests
 msal
 python-dotenv
 pylint
->>>>>>> requirements.txt
+pytest-cov
