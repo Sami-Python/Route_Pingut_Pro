@@ -296,7 +296,7 @@ with st.expander("Graph API Demo", expanded=False):
     st.caption("After logging in, the token will be automatically populated below.")
     
     default_token = st.session_state.get("access_token", "")
-    token = st.text_input("Access Token", value=default_token, type="password")
+    token = st.text_input("Access Token", value=default_token, type="password", key="graph_token_input")
     
     if st.button("Get My Calendar Events", key="get_graph_events"):
         if not token:
@@ -309,6 +309,53 @@ with st.expander("Graph API Demo", expanded=False):
                     data = response.json()
                     st.success("Successfully fetched events!")
                     st.session_state["outlook_events_data"] = data
+                    with st.expander("Raw Data"):
+                        st.json(data)
+                else:
+                    st.error(f"Error: {response.status_code}")
+                    st.json(response.json())
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+
+with st.expander("Google Calendar demo", expanded=False):
+    st.subheader("Google Calendar")
+    
+    login_url = "http://localhost:8000/gcal/login"
+    st.markdown(f"👉 **[Click here to Login]({login_url})**", unsafe_allow_html=True)
+    st.caption("After logging in, the token will be automatically populated below.")
+    
+    default_token = st.session_state.get("access_token", "")
+    token = st.text_input("Access Token", value=default_token, type="password", key="gcal_token_input")
+    
+    if st.button("Get My Calendar Events", key="get_gcal_events"):
+        if not token:
+            st.warning("Please enter a token first.")
+        else:
+            try:
+                response = requests.get(f"{API_BASE_URL}/gcal/events", params={"token": token})
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    st.success("Successfully fetched events!")
+                    st.session_state["outlook_events_data"] = data
+                    with st.expander("Raw Data"):
+                        st.json(data)
+                else:
+                    st.error(f"Error: {response.status_code}")
+                    st.json(response.json())
+            except Exception as e:
+                st.error(f"Connection error: {e}")
+    if st.button("Get Google Calendars", key="get_gcal_calendars"):
+        if not token:
+            st.warning("Please enter a token first.")
+        else:
+            try:
+                response = requests.get(f"{API_BASE_URL}/gcal/calendars", params={"token": token})
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    st.success("Successfully fetched calendars!")
+                    st.session_state["outlook_calendars_data"] = data
                     with st.expander("Raw Data"):
                         st.json(data)
                 else:
