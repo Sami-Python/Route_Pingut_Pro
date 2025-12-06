@@ -15,4 +15,5 @@ uvicorn
 requests
 msal
 python-dotenv
+pylint
 >>>>>>> requirements.txt
