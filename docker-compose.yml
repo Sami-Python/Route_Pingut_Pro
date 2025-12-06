@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -12,7 +10,7 @@ services:
       - TZ=Europe/Helsinki
     networks:
       - default
-      - meteo-network  # Connect to Open-Meteo network
+  #    - meteo-network # Connect to Open-Meteo network
 
   streamlit:
     build:
@@ -27,31 +25,30 @@ services:
       - api
     networks:
       - default
-      - meteo-network
+  #    - meteo-network
 
-# Define external network reference
-networks:
-  meteo-network:
-    external: true
-    name: open_meteo_meteo-network  # Reference to testi_meteo's network
-
+  # Define external network reference
+  #networks:
+  #  meteo-network:
+  #    external: true
+  #    name: open_meteo_meteo-network # Reference to testi_meteo's network
   #mkdocs-prod:
   #  # Rakentaa imagen projektin juuresta (käyttää Dockerfileä)
   #  build:
   #    context: .
   #    dockerfile: Dockerfile
-#
+  #
   #  # nimi kontille
   #  container_name: mkdocs-docs
-#
+  #
   #  # Julkaistaan Nginx-portti ulos
   #  # Jos .env-tiedostossa on MKDOCS_PORT, käytetään sitä, muuten 8080
   #  ports:
   #    - "${MKDOCS_PORT:-8080}:80"
-#
+  #
   #  # Käynnistyy automaattisesti uudelleen, ellei pysäytetä käsin
   #  restart: unless-stopped
-#
+  #
   #  # Aikavyöhyke lokeihin jne.
   #  environment:
   #    - TZ=Europe/Helsinki
