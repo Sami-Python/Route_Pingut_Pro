@@ -1,0 +1,87 @@
+/* Global Theme Overrides - REMOVED FORCED DARK MODE */
+/* Let Streamlit handle the main background */
+
+/* Card Container Style - Neutral for Light/Dark */
+.css-card {
+    background-color: rgba(128, 128, 128, 0.1);
+    /* Semi-transparent gray */
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1rem;
+    border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+/* Headings - Reset to inherit or subtle override */
+h1,
+h2,
+h3 {
+    font-family: 'Inter', sans-serif;
+    /* color: inherit; Use default theme color */
+}
+
+h1 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+/* Metrics */
+[data-testid="stMetricValue"] {
+    font-size: 1.8rem !important;
+    /* Color handled by theme usually, or set specific if needed */
+}
+
+/* Buttons */
+.stButton button {
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+/* Only style PRIMARY button strongly */
+.stButton button[kind="primary"] {
+    background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
+    color: #000 !important;
+    /* Force black text on this bright button */
+    border: none;
+    box-shadow: 0 4px 15px rgba(0, 201, 255, 0.4);
+}
+
+.stButton button[kind="primary"]:hover {
+    box-shadow: 0 6px 20px rgba(0, 201, 255, 0.6);
+    transform: translateY(-1px);
+}
+
+/* Feed Item - Theme adaptive */
+.feed-item {
+    background-color: rgba(128, 128, 128, 0.05);
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border-left: 4px solid #00ccff;
+}
+
+.feed-item.critical {
+    border-left-color: #ff4b4b;
+}
+
+.feed-item.warning {
+    border-left-color: #ffa500;
+}
+
+.feed-title {
+    font-weight: 600;
+    font-size: 0.95em;
+    margin-bottom: 4px;
+}
+
+.feed-body {
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+
+.feed-meta {
+    font-size: 0.75em;
+    opacity: 0.7;
+    margin-top: 4px;
+}

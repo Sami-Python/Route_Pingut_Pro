@@ -10,7 +10,10 @@ from dotenv import load_dotenv, set_key
 import os
 from streamlit_js_eval import get_geolocation
 import requests
+import streamlit_calendar
 from streamlit_calendar import calendar
+import altair as alt
+import pandas as pd
 
 # 1. Ladataan ympäristömuuttujat
 load_dotenv()
@@ -69,11 +72,12 @@ def _add_ical_events(url: str):
 @st.cache_data(ttl=600)
 def get_cached_route(origin: Tuple[float, float], 
                      dest: Tuple[float, float], 
-                     dep_time: str,
-                     mode: str,
-                     avoid_list: List[str],
+                     dep_time: str = None,
+                     arr_time: str = None,
+                     mode: str = "fastest",
+                     avoid_list: List[str] = [],
                      alternatives: int = 0):
-    return route(origin, dest, departure_time=dep_time, routing_mode=mode, avoid_features=avoid_list, alternatives=alternatives)
+    return route(origin, dest, departure_time=dep_time, arrival_time=arr_time, routing_mode=mode, avoid_features=avoid_list, alternatives=alternatives)
 
 @st.cache_data(ttl=3600)
 def geocode_cached(query: str):
@@ -359,6 +363,15 @@ def clear_search():
 
 st.set_page_config(page_title="Reitti Pro", layout="wide")
 
+def load_css(file_name):
+    try:
+        with open(file_name) as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except FileNotFoundError:
+        pass
+
+load_css("styles.css")
+
 keys = ["all_routes", "route_summaries", "selected_route_index", "cameras", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "selected_station", "weather_timestamps", "weather_host", "weather_paths",
         "road_weather", "vms", "maintenance", "lam", "data_by_route"]
 
@@ -374,6 +387,8 @@ if "dest_input" not in st.session_state:
     st.session_state.dest_input = "Tampere"
 if "date_input" not in st.session_state:
     st.session_state.date_input = datetime.date.today()
+if "is_arrival_mode" not in st.session_state:
+    st.session_state.is_arrival_mode = False
 
 if "ui_default_time" not in st.session_state:
     st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
@@ -488,6 +503,7 @@ with st.sidebar:
                     
                     if location:
                         st.session_state["dest_input"] = location
+                        st.session_state["is_arrival_mode"] = True # Set to Arrival Mode
                         st.toast(f"Määränpää asetettu: {location}")
                     
                     if start_str:
@@ -533,6 +549,28 @@ with st.sidebar:
             st.rerun()
         st.divider()
 
+    # --- REITTIHÄLYTYKSET ---
+    if "digitraffic_messages" in st.session_state and st.session_state.digitraffic_messages:
+        st.subheader("⚠️ Hälytykset reitillä")
+        
+        # Liikennetiedotteet
+        for msg in st.session_state.digitraffic_messages:
+            icon = "🛑"
+            st.warning(f"{icon} **{msg.get('type', 'Häiriö')}**\n{msg.get('desc')}")
+            
+    if "road_weather" in st.session_state and st.session_state.road_weather:
+         # Filter warnings
+         warnings = [w for w in st.session_state.road_weather if w.get('condition') in ['JÄINEN', 'LUMI', 'HUONO_NAKYVYYS'] or w.get('overall') == 'HUONO']
+         
+         if warnings:
+             if "digitraffic_messages" not in st.session_state or not st.session_state.digitraffic_messages:
+                 st.subheader("⚠️ Hälytykset reitillä")
+             
+             for w in warnings:
+                 st.info(f"❄️ **{w.get('station')}**: {w.get('condition', 'Normaali')}\nTie: {w.get('road_temp')}°C")
+
+    st.divider()
+
     st.header("🗺️ Asetukset")
     map_style = st.selectbox("Karttatyyli", ["mapbox://styles/mapbox/dark-v11", "mapbox://styles/mapbox/streets-v12", "mapbox://styles/mapbox/satellite-streets-v12"])
     
@@ -543,22 +581,7 @@ with st.sidebar:
     if st.checkbox("Vältä moottoriteitä"): avoid_options.append("controlledAccessHighway")
     if st.checkbox("Vältä tietulleja"): avoid_options.append("tollRoad")
     
-    st.subheader("Tasot")
-    layer_settings = {
-        "show_route": st.checkbox("Reittiviiva", True),
-        "show_weather": st.checkbox("Sade-ennuste", True),
-        "show_incidents": st.checkbox("Häiriöt", True),
-        "show_cameras": st.checkbox("Kelikamerat 📷", True),
-        "show_road_weather": st.checkbox("Tiesää 🌡️", True),
-        "show_vms": st.checkbox("Opasteet 🛑", True),
-        "show_maintenance": st.checkbox("Kunnossapito 🚜", True),
-        "show_lam": st.checkbox("LAM-pisteet 📊", True),
-        "show_car": st.checkbox("Auto", True),
-    }
-    
-    weather_opacity = 0.0
-    if layer_settings["show_weather"]:
-        weather_opacity = st.slider("Sään läpinäkyvyys", 0.0, 1.0, 0.6, step=0.1)
+
     
     st.divider()
     with st.expander("🛠️ Debug: Säädata"):
@@ -597,46 +620,134 @@ with st.sidebar:
             chart_data.append(val)
         
         if has_elevation:
-            st.area_chart(chart_data, color="#ffaa00", width='stretch')
+            # Get current slider pos
+            slider_val = st.session_state.get("travel_slider", 0)
+            
+            # Calculate current index based on slider time
+            current_idx = 0
+            if st.session_state.route_summaries and st.session_state.selected_route_index < len(st.session_state.route_summaries):
+                 summ = st.session_state.route_summaries[st.session_state.selected_route_index]
+                 if summ:
+                     d_t = summ[1] * 60 # hours to mins
+                     if d_t > 0:
+                        current_idx = int((slider_val / d_t) * len(chart_data))
+
+            # Create DataFrame for Altair
+            df_elev = pd.DataFrame({
+                "index": range(len(chart_data)),
+                "elevation": chart_data,
+                "status": ["Mennyt" if i <= current_idx else "Tuleva" for i in range(len(chart_data))]
+            })
+            
+            # Enable selection
+            # Explicitly name the selection to avoid Default param naming issues
+            # For bar chart, click on the bar itself works well.
+            selection = alt.selection_point(name="travel_select", encodings=['x'], on='click') 
+            
+            # Use mark_bar for single-view clickability (user can click anywhere on the 'hill')
+            base = alt.Chart(df_elev).mark_bar(width=2).encode(
+                x=alt.X("index", title="Reittipisteet"),
+                y=alt.Y("elevation", title="Korkeus (m)"),
+                color=alt.Color("status", scale=alt.Scale(domain=["Mennyt", "Tuleva"], range=["#ffaa00", "#e0e0e0"]), legend=None),
+                tooltip=["index", "elevation"]
+            ).properties(height=200).add_params(selection)
+
+            # Render single chart (no layers)
+            chart_selection = st.altair_chart(base, width="stretch", theme="streamlit", on_select="rerun")
+            
+            # Handle selection to update slider
+            if len(chart_selection["selection"]) > 0:
+                try: 
+                    # Look for our named selection
+                    if "travel_select" in chart_selection["selection"]:
+                         sel_data = chart_selection["selection"]["travel_select"]
+                         
+                         rows = []
+                         if isinstance(sel_data, list):
+                             for item in sel_data:
+                                 if isinstance(item, dict) and "index" in item:
+                                     rows.append(item["index"])
+                                 elif isinstance(item, int):
+                                     rows.append(item)
+                         elif isinstance(sel_data, dict) and "index" in sel_data:
+                             val = sel_data["index"]
+                             if isinstance(val, list): rows = val
+                             else: rows = [val]
+
+                         if rows:
+                            selected_idx = rows[0]
+                            summ = st.session_state.route_summaries[st.session_state.selected_route_index]
+                            d_t = summ[1] * 60
+                            if len(chart_data) > 0:
+                                 new_time = int((selected_idx / len(chart_data)) * d_t)
+                                 
+                                 current_slider = st.session_state.get("travel_slider", 0)
+                                 if abs(new_time - current_slider) > 0:
+                                     st.session_state["travel_slider"] = new_time
+                                     st.toast(f"📍 Siirrytty kohtaan: {int(new_time)} min")
+                                     st.rerun()
+                except Exception as e:
+                    st.error(f"Chart selection error: {e}")
+
+            if current_idx > 0:
+                 st.caption(f"📍 Sijainti profiilissa: {current_idx}/{len(chart_data)}")
         else:
             st.info("Ei korkeusdataa.")
 
 # --- INPUTS ---
-c1, c2, c3 = st.columns(3)
-search_disabled = False
+with st.container():
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
+    st.markdown("### 📍 Reittihaku")
+    
+    c1, c2, c3 = st.columns([2, 2, 2])
+    search_disabled = False
 
-with c1:
-    # Haetaan checkboxin tila session statesta, jotta voimme disabloida inputin ennen checkboxin renderöintiä
-    gps_enabled = st.session_state.get("use_gps_checkbox", False)
-    
-    origin = st.text_input("Lähtö", "Helsinki", disabled=gps_enabled)
-    
-    use_gps = st.checkbox("Käytä GPS-sijaintia", key="use_gps_checkbox")
-    
-    if use_gps:
-        if st.session_state.current_location:
-             lat, lon = st.session_state.current_location
-             st.caption(f"✅ GPS: {lat:.4f}, {lon:.4f}")
+    with c1:
+        # Haetaan checkboxin tila session statesta
+        gps_enabled = st.session_state.get("use_gps_checkbox", False)
+        
+        origin = st.text_input("Lähtö", "Helsinki", disabled=gps_enabled, help="Mistä lähdetään?")
+        
+        use_gps = st.checkbox("Käytä GPS-sijaintia", key="use_gps_checkbox")
+        
+        if use_gps:
+            if st.session_state.current_location:
+                 lat, lon = st.session_state.current_location
+                 st.caption(f"✅ GPS: {lat:.4f}, {lon:.4f}")
+            else:
+                 loc = get_geolocation()
+                 if loc and loc.get("coords"):
+                     new_loc = (loc["coords"]["latitude"], loc["coords"]["longitude"])
+                     if st.session_state.get("current_location") != new_loc:
+                         st.session_state.current_location = new_loc
+                         st.rerun()
+                 else:
+                     st.caption("⏳ Odotetaan GPS...")
+                     search_disabled = True
+
+    with c2:
+        dest = st.text_input("Määränpää", key="dest_input", help="Minne mennään?")
+        # User instruction
+        st.caption("Klikkaa kalanteritapahtumaa, jossa paikkatieto asetettu")
+
+    with c3:
+        col_d, col_t = st.columns(2)
+        with col_d: date_val = st.date_input("Päivä", key="date_input")
+        with col_t: time_val = st.time_input("Kello", st.session_state.ui_default_time, key="time_sel")
+        
+        # Time mode selector
+        is_arr = st.checkbox("Aseta saapumisaika", value=st.session_state.is_arrival_mode, key="is_arrival_mode_box")
+        st.session_state.is_arrival_mode = is_arr
+        
+        target_dt_naive = datetime.datetime.combine(date_val, time_val)
+        target_iso = target_dt_naive.astimezone().isoformat(timespec="seconds")
+        
+        if is_arr:
+             st.caption(f"🏁 Tavoite perillä: {target_dt_naive.strftime('%H:%M')}")
         else:
-             loc = get_geolocation()
-             if loc and loc.get("coords"):
-                 st.session_state.current_location = (loc["coords"]["latitude"], loc["coords"]["longitude"])
-                 st.rerun()
-             else:
-                 st.caption("⏳ Odotetaan GPS...")
-                 search_disabled = True
-
-with c2:
-    dest = st.text_input("Määränpää", "Tampere", key="dest_input")
-    # Debug: Check value after rendering
-    st.caption(f"State dest: {st.session_state.get('dest_input')}")
-
-with c3:
-    col_d, col_t = st.columns(2)
-    with col_d: date_val = st.date_input("Päivä", datetime.date.today(), key="date_input")
-    with col_t: time_val = st.time_input("Kello", st.session_state.ui_default_time, key="time_sel")
-    dep_dt_naive = datetime.datetime.combine(date_val, time_val)
-    dep_iso = dep_dt_naive.astimezone().isoformat(timespec="seconds")
+             st.caption(f"🚀 Lähtöaika: {target_dt_naive.strftime('%H:%M')}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.divider()
 
@@ -650,11 +761,16 @@ with b1:
             if o_c and d_c:
                 st.session_state.origin_coords = o_c
                 st.session_state.dest_coords = d_c
-                st.session_state.dep_dt = dep_dt_naive
+                st.session_state.dep_dt = target_dt_naive
                 
                 # Haetaan reitit (2 vaihtoehtoa jos fast, muuten 0)
                 alternatives = 2 if routing_mode == "fast" else 0
-                r_data = get_cached_route(o_c, d_c, dep_iso, routing_mode, avoid_options, alternatives)
+                
+                # Determine time params
+                dep_param = target_iso if not st.session_state.is_arrival_mode else None
+                arr_param = target_iso if st.session_state.is_arrival_mode else None
+                
+                r_data = get_cached_route(o_c, d_c, dep_time=dep_param, arr_time=arr_param, mode=routing_mode, avoid_list=avoid_options, alternatives=alternatives)
                 
                 if r_data and "routes" in r_data:
                     st.session_state.all_routes = []
@@ -732,6 +848,8 @@ with b2:
         clear_search()
         st.rerun()
 
+st.markdown("---")
+
 # --- RESULTS ---
 if st.session_state.all_routes:
     # Traffic toggle
@@ -774,22 +892,66 @@ if st.session_state.all_routes:
     else:
         dist, dur = 0, 0
     
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Matka", f"{dist:.1f} km")
     m2.metric("Ajoaika", f"{int(dur)}h {int((dur%1)*60)}min")
-    m3.metric("Lähtö", st.session_state.dep_dt.strftime("%H:%M"))
-    m4.metric("Perillä", (st.session_state.dep_dt + datetime.timedelta(hours=dur)).strftime("%H:%M"))
+    
+    if st.session_state.is_arrival_mode:
+        arrival_dt = st.session_state.dep_dt
+        departure_dt = arrival_dt - datetime.timedelta(hours=dur)
+        m3.metric("Lähtö (Arvio)", departure_dt.strftime("%H:%M"), help="Sinun pitää lähteä viimeistään tähän aikaan.")
+        m4.metric("Perillä (Tavoite)", arrival_dt.strftime("%H:%M"))
+    else:
+        departure_dt = st.session_state.dep_dt
+        arrival_dt = departure_dt + datetime.timedelta(hours=dur)
+        m3.metric("Lähtö", departure_dt.strftime("%H:%M"))
+        m4.metric("Perillä (Arvio)", arrival_dt.strftime("%H:%M"))
+
+    # --- KARTTAKONTROLLIT (MAIN COLUMN) ---
+    with st.expander("🗺️ Karttatasot & Näkymä", expanded=False):
+        c_l1, c_l2, c_l3 = st.columns(3)
+        with c_l1:
+            st.caption("Data")
+            l_route = st.checkbox("Reittiviiva", True, key="chk_route")
+            l_weather = st.checkbox("Sade-ennuste", True, key="chk_weather")
+            l_incidents = st.checkbox("Häiriöt", True, key="chk_incidents")
+        
+        with c_l2:
+            st.caption("Infra")
+            l_cam = st.checkbox("Kelikamerat 📷", True, key="chk_cam")
+            l_rw = st.checkbox("Tiesää 🌡️", True, key="chk_rw")
+            l_vms = st.checkbox("Opasteet 🛑", True, key="chk_vms")
+            
+        with c_l3:
+            st.caption("Muut")
+            l_maint = st.checkbox("Kunnossapito 🚜", True, key="chk_maint")
+            l_lam = st.checkbox("LAM-pisteet 📊", True, key="chk_lam")
+            l_car = st.checkbox("Auto", True, key="chk_car")
+            
+        layer_settings = {
+            "show_route": l_route, "show_weather": l_weather, "show_incidents": l_incidents,
+            "show_cameras": l_cam, "show_road_weather": l_rw, "show_vms": l_vms,
+            "show_maintenance": l_maint, "show_lam": l_lam, "show_car": l_car
+        }
+        # DEBUG Layers
+        # st.write(layer_settings)
+        c_s1, c_s2 = st.columns(2)
+        with c_s1:
+            weather_opacity = st.slider("Sään läpinäkyvyys", 0.0, 1.0, 0.6, step=0.1) if l_weather else 0.0
+        with c_s2:
+            st.caption("Karttatyyli valittu asetuksista")
 
     col_map = st.container()
     
     with col_map:
         map_placeholder = st.empty()
         c_play, c_slider = st.columns([1, 4])
-        with c_play: play = st.button("Play ▶️")
+        with c_play: play = st.button("Play ▶️", key="play_btn")
         
         total_mins = int(dur * 60)
         if total_mins < 1: total_mins = 1
-        with c_slider: t_val = st.slider("Matka etenee", 0, total_mins, 0, label_visibility="collapsed")
+        with c_slider: t_val = st.slider("Matka etenee", 0, total_mins, label_visibility="collapsed", key="travel_slider")
         
         idx = int((t_val / total_mins) * (len(coords) - 1))
         car_pos = coords[idx]
@@ -881,60 +1043,72 @@ if st.session_state.all_routes:
                                   layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    st.divider()
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("Häiriöt")
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
+    c_inc, c_dt = st.columns(2)
+    
+    with c_inc:
+        st.subheader("⚠️ Häiriöt")
         if st.session_state.here_incidents:
-            # Luodaan uniikit avaimet dropdownille (Tyyppi + Kuvaus lyhenne)
-            here_opts = []
-            for i, inc in enumerate(st.session_state.here_incidents):
-                # Yritetään kaivaa fiksu otsikko
+            # Luodaan lista valikkoa varten
+            inc_opts = []
+            for inc in st.session_state.here_incidents:
+                typ = inc.get("tyyppi", "Häiriö")
                 desc = inc.get("kuvaus", "")
-                short_desc = (desc[:40] + '..') if len(desc) > 40 else desc
-                
-                # Lisätään sijainti (koordinaatit) otsikkoon
-                lat = inc.get("lat")
-                lon = inc.get("lon")
-                loc_str = f"({lat:.3f}, {lon:.3f})" if lat and lon else ""
-                
-                label = f"{inc.get('tyyppi')} {loc_str} - {short_desc}"
-                here_opts.append(label)
+                short = (desc[:40] + "..") if len(desc) > 40 else desc
+                inc_opts.append(f"{typ} - {short}")
             
-            selected_here_idx = st.selectbox("Valitse häiriö", range(len(here_opts)), format_func=lambda x: here_opts[x], key="here_sel")
+            sel_inc_idx = st.selectbox("Valitse häiriö", range(len(inc_opts)), format_func=lambda x: inc_opts[x], key="inc_sel_box")
             
-            if selected_here_idx is not None:
-                sel_inc = st.session_state.here_incidents[selected_here_idx]
-                st.info(f"**{sel_inc.get('tyyppi')}**")
-                st.write(sel_inc.get("kuvaus"))
-                if sel_inc.get("lat"):
-                    st.caption(f"Sijainti: {sel_inc.get('lat'):.4f}, {sel_inc.get('lon'):.4f}")
-        else:
-            st.info("Ei häiriöitä tai tietöitä reitillä.")
+            if sel_inc_idx is not None:
+                inc = st.session_state.here_incidents[sel_inc_idx]
+                typ = inc.get("tyyppi", "Häiriö")
+                desc = inc.get("kuvaus", "")
+                lat_i = inc.get("lat")
+                # Severity
+                severity = "warning"
+                if "critical" in str(inc.get("taso", "")).lower(): severity = "critical"
 
-    with c2:
-        st.subheader("Digitraffic tiedotteet")
+                st.markdown(f"""
+                <div class="feed-item {severity}">
+                    <div class="feed-title">{typ}</div>
+                    <div class="feed-body">{desc}</div>
+                    <div class="feed-meta">Sijainti: {lat_i:.4f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Ei raportoituja häiriöitä.")
+
+    with c_dt:
+        st.subheader("📢 Tiedotteet")
         if st.session_state.digitraffic_messages:
             dt_opts = []
             for msg in st.session_state.digitraffic_messages:
-                # Otsikko + Sijainti
-                loc = msg.get("sijainti", "")
                 title = msg.get("otsikko", "Tiedote")
+                loc = msg.get("sijainti", "")
                 label = f"{title} ({loc})" if loc else title
                 dt_opts.append(label)
-                
-            selected_dt_idx = st.selectbox("Valitse tiedote", range(len(dt_opts)), format_func=lambda x: dt_opts[x], key="dt_sel")
             
-            if selected_dt_idx is not None:
-                sel_msg = st.session_state.digitraffic_messages[selected_dt_idx]
-                st.info(f"🇫🇮 {sel_msg.get('otsikko')}")
-                st.write(sel_msg.get("kuvaus"))
-                st.caption(f"Alue: {sel_msg.get('sijainti', 'Ei tarkkaa sijaintia')}")
-                if sel_msg.get("aika"):
-                    st.caption(f"Päivitetty: {sel_msg.get('aika')}")
+            sel_dt_idx = st.selectbox("Valitse tiedote", range(len(dt_opts)), format_func=lambda x: dt_opts[x], key="dt_sel_box")
+            
+            if sel_dt_idx is not None:
+                msg = st.session_state.digitraffic_messages[sel_dt_idx]
+                title = msg.get("otsikko", "Tiedote")
+                desc = msg.get("kuvaus", "")
+                loc = msg.get("sijainti", "")
+                t_update = msg.get("aika", "")
+                
+                st.markdown(f"""
+                <div class="feed-item">
+                    <div class="feed-title">🇫🇮 {title}</div>
+                    <div class="feed-body">{desc}</div>
+                    <div class="feed-meta">{loc} | {t_update}</div>
+                </div>
+                """, unsafe_allow_html=True)
         else:
             st.info("Ei aktiivisia liikennetiedotteita.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
     st.subheader("🌤️ Sää reitillä nyt ")

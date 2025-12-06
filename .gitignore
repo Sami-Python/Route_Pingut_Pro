@@ -244,3 +244,6 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+
+# Personal Memo
+sami_memo.md
