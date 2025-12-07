@@ -14,12 +14,14 @@ import streamlit_calendar
 from streamlit_calendar import calendar
 import altair as alt
 import pandas as pd
+import numpy as np
 
 # 1. Ladataan ympäristömuuttujat
 load_dotenv()
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 pdk.settings.mapbox_api_key = MAPBOX_TOKEN
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 
 # 2. Tuodaan funktiot
 from here_client import geocode, route, parse_traffic_incidents
@@ -100,17 +102,223 @@ def extract_route_summary(route_section: Dict[str, Any]) -> Optional[Tuple[float
         return None
 
 # ====================================================================
-# MAP CREATION
+# VISUALIZATION HELPERS (OPEN-METEO)
 # ====================================================================
+
+# Temperature color scale
+TEMP_COLORS = {
+    -30: [139, 0, 139], -20: [0, 0, 255], -10: [0, 191, 255],
+    0: [173, 216, 230], 5: [255, 255, 255], 10: [255, 255, 200],
+    15: [255, 255, 0], 20: [255, 200, 0], 25: [255, 165, 0],
+    30: [255, 100, 0], 35: [255, 0, 0]
+}
+
+def get_color_for_temperature(temp):
+    temps = sorted(TEMP_COLORS.keys())
+    if temp <= temps[0]: return TEMP_COLORS[temps[0]]
+    if temp >= temps[-1]: return TEMP_COLORS[temps[-1]]
+    for i in range(len(temps) - 1):
+        if temps[i] <= temp <= temps[i + 1]:
+            lower, upper = TEMP_COLORS[temps[i]], TEMP_COLORS[temps[i + 1]]
+            ratio = (temp - temps[i]) / (temps[i+1] - temps[i])
+            return [int(lower[j] + ratio * (upper[j] - lower[j])) for j in range(3)]
+    return [255, 255, 255]
+
+def create_temperature_layer(data, visible=True):
+    if not data or not visible: return None
+    df = pd.DataFrame(data)
+    if df.empty: return None
+    
+    df['color'] = df['temperature'].apply(lambda t: get_color_for_temperature(t) + [200]) # Alpha 200
+    
+    return pdk.Layer(
+        "ScatterplotLayer",
+        data=df,
+        get_position='[lon, lat]',
+        get_fill_color='color',
+        get_radius=12000, 
+        pickable=True,
+        opacity=0.8,
+        filled=True,
+        stroked=False
+    )
+
+def create_precipitation_layer(data, visible=True):
+    """Create professional contour-based precipitation visualization using GeoJsonLayer."""
+    if not data or not visible: 
+        return None
+    
+    try:
+        from scipy.interpolate import griddata
+        import matplotlib.pyplot as plt
+        from matplotlib.path import Path
+        from shapely.geometry import Polygon, MultiPolygon
+        import numpy as np
+    except ImportError as e:
+        st.error(f"Missing library for contours: {e}")
+        return None
+    
+    # Filter significant precipitation
+    precip_data = [d for d in data if d.get('precipitation', 0) > 0.05]
+    
+    if len(precip_data) < 4:  # Need minimum points for interpolation
+        return None
+    
+    # Extract coordinates and values
+    lons = np.array([d['lon'] for d in precip_data])
+    lats = np.array([d['lat'] for d in precip_data])
+    precips = np.array([d['precipitation'] for d in precip_data])
+    
+    # Create regular grid for interpolation
+    lon_min, lon_max = lons.min(), lons.max()
+    lat_min, lat_max = lats.min(), lats.max()
+    
+    # Add padding to avoid edge effects
+    lon_padding = (lon_max - lon_min) * 0.1
+    lat_padding = (lat_max - lat_min) * 0.1
+    
+    # Higher resolution grid for smoother contours (150x150)
+    grid_lon = np.linspace(lon_min - lon_padding, lon_max + lon_padding, 150)
+    grid_lat = np.linspace(lat_min - lat_padding, lat_max + lat_padding, 150)
+    grid_lon_mesh, grid_lat_mesh = np.meshgrid(grid_lon, grid_lat)
+    
+    # Interpolate precipitation values onto regular grid
+    try:
+        grid_precip = griddata(
+            points=(lons, lats),
+            values=precips,
+            xi=(grid_lon_mesh, grid_lat_mesh),
+            method='cubic',
+            fill_value=0
+        )
+    except Exception:
+        # Fallback to linear if cubic fails
+        grid_precip = griddata(
+            points=(lons, lats),
+            values=precips,
+            xi=(grid_lon_mesh, grid_lat_mesh),
+            method='linear',
+            fill_value=0
+        )
+    
+    # Define contour levels and colors
+    levels = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0]
+    colors = [
+        [135, 206, 250, 150],  # 0.1-0.5: Light Sky Blue
+        [100, 180, 240, 170],  # 0.5-1.0: Light Blue
+        [70, 130, 220, 190],   # 1.0-2.0: Cornflower Blue
+        [40, 90, 200, 210],    # 2.0-5.0: Medium Blue
+        [20, 50, 160, 230],    # 5.0-10.0: Dark Blue
+        [0, 0, 139, 250]       # >10.0: Very Dark Blue
+    ]
+    
+    # Generate contours using matplotlib
+    fig, ax = plt.subplots(figsize=(1, 1))
+    contour_set = ax.contourf(grid_lon_mesh, grid_lat_mesh, grid_precip, levels=levels, extend='max')
+    plt.close(fig)
+    
+    # Convert contours to GeoJSON features
+    features = []
+    
+    # Use allsegs to get polygon segments for each level (works with all matplotlib versions)
+    try:
+        all_segments = contour_set.allsegs
+    except AttributeError:
+        # Fallback for very old matplotlib
+        st.error("Matplotlib version not compatible. Please update: pip install --upgrade matplotlib")
+        return None
+    
+    for level_idx, segments in enumerate(all_segments):
+        # Get color for this level
+        color = colors[min(level_idx, len(colors) - 1)]
+        
+        # Each level can have multiple polygons
+        for segment in segments:
+            if len(segment) < 3:
+                continue
+            
+            try:
+                # Create shapely polygon from segment
+                poly = Polygon(segment)
+                
+                # Less aggressive simplification for smoother curves (0.005 instead of 0.01)
+                poly = poly.simplify(0.005, preserve_topology=True)
+                
+                if not poly.is_valid or poly.is_empty:
+                    continue
+                
+                # Get polygon centroid to determine actual precipitation level
+                centroid = poly.centroid
+                cent_lon, cent_lat = centroid.x, centroid.y
+                
+                # Find closest grid point to centroid
+                lon_idx = np.argmin(np.abs(grid_lon - cent_lon))
+                lat_idx = np.argmin(np.abs(grid_lat - cent_lat))
+                
+                # Get actual precipitation value at this location
+                actual_precip = grid_precip[lat_idx, lon_idx]
+                
+                # Determine which level this belongs to
+                actual_level_idx = 0
+                for i in range(len(levels) - 1):
+                    if actual_precip >= levels[i]:
+                        actual_level_idx = i
+                
+                # Use actual level for color and range
+                color = colors[min(actual_level_idx, len(colors) - 1)]
+                
+                # Convert to GeoJSON-like structure
+                coords = list(poly.exterior.coords)
+                
+                # Create readable precipitation range text based on actual level
+                if actual_level_idx < len(levels) - 1:
+                    precip_range = f"{levels[actual_level_idx]:.1f}-{levels[actual_level_idx + 1]:.1f} mm/h"
+                else:
+                    precip_range = f">{levels[-1]:.1f} mm/h"
+                
+                features.append({
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [coords]
+                    },
+                    "properties": {
+                        "fill_color": color,
+                        "precipitation_level": levels[min(actual_level_idx, len(levels) - 1)] if actual_level_idx < len(levels) else levels[-1],
+                        "precipitation_range": precip_range
+                    }
+                })
+            except Exception:
+                continue
+    
+    if not features:
+        return None
+    
+    # Create GeoJSON structure
+    geojson = {
+        "type": "FeatureCollection",
+        "features": features
+    }
+    
+    # Create GeoJsonLayer (non-interactive to allow clicks through to cameras)
+    return pdk.Layer(
+        "GeoJsonLayer",
+        data=geojson,
+        opacity=0.6,
+        filled=True,
+        get_fill_color="properties.fill_color"
+    )
+
+
 
 def create_map(all_routes, selected_route_index, incidents, digitraffic_incidents, car_pos, origin_coords, dest_coords, cameras, 
                road_weather, vms, maintenance, lam,
-               layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity):
+                layer_settings, map_style, weather_ts, weather_path, weather_host, weather_opacity,
+                temperature_data=None, precipitation_data=None):
     layers = []
 
-    # 1. SÄÄ (Manual Tiling via BitmapLayers)
-    if layer_settings.get("show_weather") and weather_ts and weather_path and weather_host:
-        
+    # 0. SÄÄ (RainViewer Manual Tiling)
+    if layer_settings.get("show_rainviewer") and weather_ts and weather_path and weather_host:
         def deg2num(lat_deg, lon_deg, zoom):
             lat_rad = math.radians(lat_deg)
             n = 2.0 ** zoom
@@ -158,6 +366,14 @@ def create_map(all_routes, selected_route_index, incidents, digitraffic_incident
                 ))
                 count += 1
 
+    if layer_settings.get("show_weather"): # Precipitation Heatmap
+        p_layer = create_precipitation_layer(precipitation_data)
+        if p_layer: layers.append(p_layer)
+
+    if layer_settings.get("show_temp"): # Temperature Grid
+        t_layer = create_temperature_layer(temperature_data)
+        if t_layer: layers.append(t_layer)
+
     # 2. REITIT (Vaihtoehtoiset ja valittu)
     if layer_settings.get("show_route") and all_routes:
         # Piirretään ensin ei-valitut reitit harmaina
@@ -188,22 +404,22 @@ def create_map(all_routes, selected_route_index, incidents, digitraffic_incident
                 opacity=0.9,
             ))
 
-    # 3. KELIKAMERAT
-    if layer_settings.get("show_cameras") and cameras:
-        layers.append(pdk.Layer(
-            "ScatterplotLayer",
-            data=cameras,
-            id="cameras", 
-            get_position="[lon, lat]",
-            get_color=[255, 220, 0], 
-            get_radius=800,
-            radius_min_pixels=8, 
-            pickable=True,       
-            stroked=True,
-            get_line_color=[0,0,0],
-            line_width_min_pixels=1,
-            auto_highlight=True
-        ))
+    # 3. KELIKAMERAT (Moved to end of layers list as cameras-top for z-index)
+    # if layer_settings.get("show_cameras") and cameras:
+    #     layers.append(pdk.Layer(
+    #         "ScatterplotLayer",
+    #         data=cameras,
+    #         id="cameras", 
+    #         get_position="[lon, lat]",
+    #         get_color=[255, 220, 0], 
+    #         get_radius=800,
+    #         radius_min_pixels=8, 
+    #         pickable=True,       
+    #         stroked=True,
+    #         get_line_color=[0,0,0],
+    #         line_width_min_pixels=1,
+    #         auto_highlight=True
+    #     ))
 
     # 4. PISTEET
     point_data = []
@@ -340,6 +556,23 @@ def create_map(all_routes, selected_route_index, incidents, digitraffic_incident
     if layer_settings.get("show_car") and car_pos:
         layers.append(pdk.Layer("ScatterplotLayer", data=[{"pos": [car_pos[1], car_pos[0]], "name": "Auto"}], id="car", get_position="pos", get_color=[0, 100, 255], get_radius=1000, radius_min_pixels=8, pickable=True, stroked=True, get_line_color=[255, 255, 255], line_width_min_pixels=2))
 
+    # 12. KAMERAT (UUDELLEEN PÄÄLLIMMÄISEKSI) - Ensure cameras are clickable above precipitation
+    if layer_settings.get("show_cameras") and cameras:
+        layers.append(pdk.Layer(
+            "ScatterplotLayer",
+            data=cameras,
+            id="cameras-top", 
+            get_position="[lon, lat]",
+            get_color=[255, 220, 0], 
+            get_radius=800,
+            radius_min_pixels=8, 
+            pickable=True,       
+            stroked=True,
+            get_line_color=[0,0,0],
+            line_width_min_pixels=1,
+            auto_highlight=True
+        ))
+
     if all_routes and selected_route_index < len(all_routes):
         coords = all_routes[selected_route_index]
         formatted_points = [[p[1], p[0]] for p in coords]
@@ -348,7 +581,13 @@ def create_map(all_routes, selected_route_index, incidents, digitraffic_incident
     else:
         view_state = pdk.ViewState(latitude=61.92, longitude=25.74, zoom=6)
 
-    tooltip = {"text": "{name}"}
+    tooltip = {
+        "html": "<b>{name}</b>",
+        "style": {
+            "backgroundColor": "steelblue",
+            "color": "white"
+        }
+    }
 
     return pdk.Deck(map_style=map_style, initial_view_state=view_state, layers=layers, api_keys={"mapbox": MAPBOX_TOKEN}, tooltip=tooltip)
 
@@ -373,11 +612,11 @@ def load_css(file_name):
 load_css("styles.css")
 
 keys = ["all_routes", "route_summaries", "selected_route_index", "cameras", "origin_coords", "dest_coords", "current_location", "dep_dt", "here_incidents", "digitraffic_messages", "selected_camera", "selected_station", "weather_timestamps", "weather_host", "weather_paths",
-        "road_weather", "vms", "maintenance", "lam", "data_by_route"]
+        "road_weather", "vms", "maintenance", "lam", "data_by_route", "meteo_temp", "meteo_precip"]
 
 for key in keys:
     if key not in st.session_state:
-        st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam", "data_by_route"] else None
+        st.session_state[key] = [] if key in ["all_routes", "route_summaries", "cameras", "here_incidents", "digitraffic_messages", "weather_timestamps", "road_weather", "vms", "maintenance", "lam", "data_by_route", "meteo_temp", "meteo_precip"] else None
         if key == "weather_paths": st.session_state[key] = {}
         if key == "weather_paths": st.session_state[key] = {}
         if key == "selected_route_index": st.session_state[key] = 0
@@ -437,64 +676,6 @@ with st.sidebar:
                     st.rerun()
             
             # Käytetään syötettä tai demoa esikatseluun
-            target_url = ical_input if ical_input and ical_input.strip() else "https://lukkarit.kamk.fi/ical.php?hash=E74AC94AE7A19AC99110C39EE535C0DBB0DF8AAE"
-            if not ical_input:
-                 st.caption("Käytetään oletus/demo kalenteria.")
-        
-        if st.button("🔄 Päivitä kalenteri"):
-            _add_ical_events.clear()
-            st.rerun()
-
-        events = _add_ical_events(target_url)
-        if not events:
-            st.info("Ei tapahtumia tai yhteysvirhe.")
-        else:
-            calendar_options = {
-                "headerToolbar": {
-                    "left": "today prev,next",
-                    "center": "title",
-                    "right": "dayGridMonth,timeGridWeek"
-                },
-                "initialView": "timeGridWeek",
-                "slotMinTime": "06:00:00",
-                "slotMaxTime": "22:00:00",
-                "height": 400,
-                "buttonText": {
-                    "today": "Tänään",
-                    "month": "Kk",
-                    "week": "Vko",
-                    "day": "Pv"
-                }
-            }
-            
-            # CSS kustomointi kalenterin painikkeille
-            st.markdown("""
-                <style>
-                .fc-button {
-                    padding: 2px 5px !important;
-                    font-size: 0.8em !important;
-                }
-                .fc-toolbar-title {
-                    font-size: 1em !important;
-                }
-                </style>
-            """, unsafe_allow_html=True)
-            cal_state = calendar(events=events, options=calendar_options, key="sidebar_cal", callbacks=['eventClick'])
-            
-            if cal_state.get("eventClick"):
-                event = cal_state["eventClick"]["event"]
-                title = event.get("title", "")
-                start_str = event.get("start", "")
-                
-                # Parsitaan sijainti
-                location = event.get("extendedProps", {}).get("location")
-                if not location and " (@" in title:
-                    parts = title.split(" (@")
-                    if len(parts) > 1:
-                        location = parts[1].replace(")", "")
-                
-                # Prevent infinite rerun loop
-                # Check if we already processed this click
                 click_id = f"{event.get('title')}_{start_str}"
                 last_click = st.session_state.get("last_cal_click")
                 
@@ -829,11 +1010,33 @@ with b1:
 
                         progress_bar.empty()
                     
-                    # Haetaan säädata
-                    host, ts_dict = get_cached_weather_data()
-                    st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
-                    st.session_state.weather_paths = ts_dict
-                    st.session_state.weather_host = host
+                    # Pre-fetch Open-Meteo Data (once per session/search)
+                    with st.spinner("Haetaan sääennusteet..."):
+                        try:
+                             # Default full Finland BBox from api_server
+                             resp_t = requests.get(f"{API_URL}/api/forecast/temperature", params={"hours": 6})
+                             resp_p = requests.get(f"{API_URL}/api/forecast/weather", params={"hours": 6})
+                             
+                             if resp_t.status_code == 200: 
+                                 st.session_state.meteo_temp = resp_t.json().get("data", [])
+                                 # st.toast(f"Latasi {len(st.session_state.meteo_temp)} lämpötilapistettä")
+                             else:
+                                 st.error(f"Temp Error: {resp_t.status_code} - {resp_t.text}")
+
+                             if resp_p.status_code == 200:
+                                 st.session_state.meteo_precip = resp_p.json().get("data", [])
+                             else:
+                                 st.error(f"Precip Error: {resp_p.status_code} - {resp_p.text}")
+
+                        except Exception as e:
+                            st.error(f"Säädatan haku epäonnistui: {e}")
+                            print(f"Weather fetch error: {e}")
+                            st.session_state.meteo_temp = []
+                            st.session_state.meteo_precip = []
+
+                    # st.session_state.weather_timestamps removed (we filter dynamically from full list) 
+                    # OR we can extract unique times from meteo_temp for slider?
+                    # For now, we rely on simulation time matching closest data point.
                     
                     st.session_state.selected_camera = None
                     st.session_state.selected_station = None
@@ -914,12 +1117,15 @@ if st.session_state.all_routes:
         with c_l1:
             st.caption("Data")
             l_route = st.checkbox("Reittiviiva", True, key="chk_route")
-            l_weather = st.checkbox("Sade-ennuste", True, key="chk_weather")
+            l_weather = st.checkbox("Sade-ennuste (Heatmap)", False, key="chk_weather")
+            l_rv = st.checkbox("Sade (RainViewer)", False, key="chk_rv") # Restored
+            l_temp = st.checkbox("Lämpötila (Grid)", False, key="chk_temp")
             l_incidents = st.checkbox("Häiriöt", True, key="chk_incidents")
         
         with c_l2:
             st.caption("Infra")
-            l_cam = st.checkbox("Kelikamerat 📷", True, key="chk_cam")
+            # Disable cameras when precipitation is active
+            l_cam = st.checkbox("Kelikamerat 📷", True, key="chk_cam", disabled=l_weather)
             l_rw = st.checkbox("Tiesää 🌡️", True, key="chk_rw")
             l_vms = st.checkbox("Opasteet 🛑", True, key="chk_vms")
             
@@ -930,8 +1136,10 @@ if st.session_state.all_routes:
             l_car = st.checkbox("Auto", True, key="chk_car")
             
         layer_settings = {
-            "show_route": l_route, "show_weather": l_weather, "show_incidents": l_incidents,
-            "show_cameras": l_cam, "show_road_weather": l_rw, "show_vms": l_vms,
+            "show_route": l_route, "show_weather": l_weather, "show_temp": l_temp, "show_rainviewer": l_rv,
+            "show_incidents": l_incidents,
+            "show_cameras": l_cam and not l_weather,  # Force False when precipitation is active
+            "show_road_weather": l_rw, "show_vms": l_vms,
             "show_maintenance": l_maint, "show_lam": l_lam, "show_car": l_car
         }
         # DEBUG Layers
@@ -942,9 +1150,11 @@ if st.session_state.all_routes:
         with c_s2:
             st.caption("Karttatyyli valittu asetuksista")
 
-    col_map = st.container()
+
+    # Map and sidebar layout (2/3 map, 1/3 sidebar)
+    map_col, sidebar_col = st.columns([2, 1])
     
-    with col_map:
+    with map_col:
         map_placeholder = st.empty()
         c_play, c_slider = st.columns([1, 4])
         with c_play: play = st.button("Play ▶️", key="play_btn")
@@ -957,14 +1167,37 @@ if st.session_state.all_routes:
         car_pos = coords[idx]
         
         sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t_val)
-        sim_ts = int(sim_dt.timestamp())
-        w_ts = None
-        w_path = None
-        if st.session_state.weather_timestamps:
-            w_ts = get_closest_timestamp(sim_ts, st.session_state.weather_timestamps)
-            if w_ts and st.session_state.weather_paths:
-                w_path = st.session_state.weather_paths.get(w_ts)
-            st.caption(f"Sääkartta: {datetime.datetime.fromtimestamp(w_ts).strftime('%H:%M')}")
+        # Filter Weather Data for Current Time
+        current_temp_data = []
+        current_precip_data = []
+        current_temp_data = []
+        current_precip_data = []
+        
+        # Ensure initialization
+        if "meteo_temp" not in st.session_state: st.session_state.meteo_temp = []
+        if "meteo_precip" not in st.session_state: st.session_state.meteo_precip = []
+
+        if True: # Always run time filtering
+             # Convert sim_dt to UTC (rough adjustment for Finland)
+             # Winter time: UTC+2. Summer: UTC+3.
+             target_utc = sim_dt - datetime.timedelta(hours=2) 
+             target_h = target_utc.strftime('%Y-%m-%dT%H')
+             
+             current_temp_data = [d for d in st.session_state.meteo_temp if d.get('time', '').startswith(target_h)]
+             
+             # Fallback: if empty, try original target (maybe backend converted it?)
+             if not current_temp_data:
+                 target_h_local = sim_dt.strftime('%Y-%m-%dT%H')
+                 current_temp_data = [d for d in st.session_state.meteo_temp if d.get('time', '').startswith(target_h_local)]
+                 if current_temp_data: target_h = target_h_local # It matched local!
+
+             current_precip_data = [d for d in st.session_state.meteo_precip if d.get('time', '').startswith(target_h)]
+
+             st.caption(f"Sääennuste: {sim_dt.strftime('%H:%M')} -> UTC approx {target_h} ({len(current_temp_data)} t, {len(current_precip_data)} p)")
+             
+             if not current_temp_data and st.session_state.meteo_temp:
+                 st.warning(f"Ei dataa! Sim: {sim_dt.isoformat()} vs Data[0]: {st.session_state.meteo_temp[0]['time']}")
+
 
         deck = create_map(st.session_state.all_routes, 
                           st.session_state.selected_route_index,
@@ -980,12 +1213,33 @@ if st.session_state.all_routes:
                           lam,
                           layer_settings, 
                           map_style, 
-                          w_ts, 
-                          w_path, 
-                          st.session_state.weather_host, 
-                          weather_opacity)
+                          st.session_state.weather_timestamps,
+                          st.session_state.weather_paths.get(st.session_state.weather_timestamps[-1]) if st.session_state.weather_timestamps else None,
+                          st.session_state.weather_host,
+                          0.6,
+                          temperature_data=current_temp_data,
+                          precipitation_data=current_precip_data)
         
         selection = map_placeholder.pydeck_chart(deck, width="stretch", on_select="rerun", selection_mode="single-object")
+        
+        # Add precipitation legend below map if layer is enabled
+        if layer_settings.get("show_weather") and current_precip_data:
+            st.caption("🌧️ **Sade-ennuste selite:**")
+            leg_cols = st.columns(4)  # Reduced from 6 to 4 for narrower map
+            legend_items = [
+                ("rgb(100,180,240)", "0.1-1.0"),   # Average of first two levels
+                ("rgb(70,130,220)", "1.0-2.0"),
+                ("rgb(40,90,200)", "2.0-5.0"),
+                ("rgb(20,50,160)", "5.0-10.0")     # Show 5-10 instead of >5
+            ]
+            for i, (color, label) in enumerate(legend_items):
+                with leg_cols[i]:
+                    st.markdown(f"""
+                    <div style="text-align: center;">
+                        <div style="width: 100%; height: 20px; background: {color}; border-radius: 4px; margin-bottom: 4px;"></div>
+                        <small>{label} mm/h</small>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         if selection.selection:
             found_index = None
@@ -997,9 +1251,10 @@ if st.session_state.all_routes:
 
             if "objects" in selection.selection:
                 objs = selection.selection["objects"]
-                if "cameras" in objs and objs["cameras"]:
-                    new_cam = objs["cameras"][0]
-                    if st.session_state.selected_camera != new_cam:
+                # Check both cameras and cameras-top layers
+                if ("cameras" in objs and objs["cameras"]) or ("cameras-top" in objs and objs["cameras-top"]):
+                    new_cam = objs.get("cameras", objs.get("cameras-top", [None]))[0]
+                    if new_cam and st.session_state.selected_camera != new_cam:
                         st.session_state.selected_camera = new_cam
                         st.rerun()
                 
@@ -1031,6 +1286,25 @@ if st.session_state.all_routes:
                 idx = int((t / total_mins) * (len(coords) - 1))
                 car_pos = coords[idx]
                 sim_dt = st.session_state.dep_dt + datetime.timedelta(minutes=t)
+                
+                # Time-based filtering for Open-Meteo data (same as static view)
+                target_utc = sim_dt - datetime.timedelta(hours=2)
+                target_h = target_utc.strftime('%Y-%m-%dT%H')
+                
+                # Filter temperature data for current time
+                play_temp_data = [d for d in st.session_state.meteo_temp if d.get('time', '').startswith(target_h)]
+                
+                # Fallback: try local time if UTC doesn't match
+                if not play_temp_data:
+                    target_h_local = sim_dt.strftime('%Y-%m-%dT%H')
+                    play_temp_data = [d for d in st.session_state.meteo_temp if d.get('time', '').startswith(target_h_local)]
+                    if play_temp_data:
+                        target_h = target_h_local
+                
+                # Filter precipitation data for current time
+                play_precip_data = [d for d in st.session_state.meteo_precip if d.get('time', '').startswith(target_h)]
+                
+                # RainViewer weather data
                 w_ts = None
                 w_path = None
                 if st.session_state.weather_timestamps:
@@ -1040,9 +1314,18 @@ if st.session_state.all_routes:
 
                 deck = create_map(st.session_state.all_routes, st.session_state.selected_route_index, st.session_state.here_incidents, dt_msgs, car_pos, st.session_state.origin_coords, st.session_state.dest_coords, st.session_state.cameras, 
                                   st.session_state.road_weather, st.session_state.vms, st.session_state.maintenance, st.session_state.lam,
-                                  layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity)
+                                  layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity,
+                                  temperature_data=play_temp_data, precipitation_data=play_precip_data)
                 map_placeholder.pydeck_chart(deck, width="stretch")
                 time.sleep(0.05)
+    
+    # Right sidebar panel
+    with sidebar_col:
+        st.markdown('<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: white;">', unsafe_allow_html=True)
+        st.subheader("📊 Lisätiedot")
+        st.info("**TBD**\n\nTähän tulee lisätietoja myöhemmin.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="css-card">', unsafe_allow_html=True)

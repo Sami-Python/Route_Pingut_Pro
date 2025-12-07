@@ -12,7 +12,12 @@ streamlit-calendar
 fastapi
 uvicorn
 requests
-msal
 python-dotenv
-icalevents
-
+numpy
+pandas
+altair
+ics
+arrow
+h3
+scipy
+matplotlib

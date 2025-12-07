@@ -22,7 +22,9 @@ from digitraffic_client import (
     get_road_weather_history
 )
 from weather_client import get_rainviewer_data, get_closest_timestamp
+from meteo_client import MeteoClient
 import requests
+import datetime
 from ics import Calendar
 import arrow
 
@@ -110,6 +112,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+meteo_client = MeteoClient()
+FINLAND_BBOX = (20.5, 59.5, 31.5, 70.1)
 
 # ====================================================================
 # ENDPOINTS - HERE API
@@ -288,6 +293,58 @@ def api_closest_timestamp(
         raise HTTPException(status_code=400, detail=f"Virhe aikaleiman parsinnassa: {e}")
 
 # ====================================================================
+# ENDPOINTS - OPEN-METEO
+# ====================================================================
+
+@app.get("/api/forecast/temperature", tags=["Open-Meteo"])
+async def get_temperature_forecast(
+    min_lon: float = Query(FINLAND_BBOX[0]),
+    min_lat: float = Query(FINLAND_BBOX[1]),
+    max_lon: float = Query(FINLAND_BBOX[2]),
+    max_lat: float = Query(FINLAND_BBOX[3]),
+    start_time: Optional[str] = Query(None),
+    hours: int = Query(6)
+):
+    """Hakee lämpötilaennusteen alueelle (Grid)."""
+    try:
+        hours = min(hours, 6)
+        if start_time:
+            start_dt = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+        else:
+            start_dt = datetime.datetime.utcnow()
+        end_dt = start_dt + datetime.timedelta(hours=hours)
+        
+        bbox = (min_lon, min_lat, max_lon, max_lat)
+        data = meteo_client.get_temperature_forecast(bbox, start_dt, end_dt)
+        return {"bbox": bbox, "start_time": start_dt.isoformat(), "end_time": end_dt.isoformat(), "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/forecast/weather", tags=["Open-Meteo"])
+async def get_weather_forecast(
+    min_lon: float = Query(FINLAND_BBOX[0]),
+    min_lat: float = Query(FINLAND_BBOX[1]),
+    max_lon: float = Query(FINLAND_BBOX[2]),
+    max_lat: float = Query(FINLAND_BBOX[3]),
+    start_time: Optional[str] = Query(None),
+    hours: int = Query(6)
+):
+    """Hakee sääennusteen (sade) alueelle (Grid)."""
+    try:
+        hours = min(hours, 6)
+        if start_time:
+            start_dt = datetime.datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+        else:
+            start_dt = datetime.datetime.utcnow()
+        end_dt = start_dt + datetime.timedelta(hours=hours)
+        
+        bbox = (min_lon, min_lat, max_lon, max_lat)
+        data = meteo_client.get_weather_symbols(bbox, start_dt, end_dt)
+        return {"bbox": bbox, "start_time": start_dt.isoformat(), "end_time": end_dt.isoformat(), "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ====================================================================
 # ENDPOINTS - CALENDAR
 # ====================================================================
 
@@ -349,7 +406,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "api_server:app",
         host="0.0.0.0",
-        port=8000,
+        port=8001,
         reload=True,
         log_level="info"
     )
