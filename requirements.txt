@@ -21,3 +21,5 @@ arrow
 h3
 scipy
 matplotlib
+pylint
+pytest-cov

@@ -1,17 +1,38 @@
 stages:
-  - deploy # Mandatory name for the stage to GitLab detect it's a Pages deployment
+  - test
+  - deploy   # Pages vaatii, että Pages-job kuuluu 'deploy'-stageen
+
+# Pylint with HTML report
+pylint:
+  tags:
+    - dind         # Lisätty tagi, jotta job käynnistyy
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pip install pylint-json2html
+    - pylint --output-format=json . > pylint-report.json || true
+    - pylint-json2html -f json -o pylint-report.html pylint-report.json
+  artifacts:
+    paths:
+      - pylint-report.html
+      - pylint-report.json
+    expire_in: 7 days
+  allow_failure: true         # ei blokkaa mergeä, mutta raportti syntyy
+  rules:
+    - if: $CI_COMMIT_BRANCH   # ajetaan kaikilla brancheilla
 
 # Pages Deployment
 pages:
   tags:
     - dind
   stage: deploy
-  # Debian 12 (Bookworm), LTS till 2028, with uv package manager
   image: ghcr.io/astral-sh/uv:python3.12-bookworm
-  script: 
+  script:
     - uv pip install -r docs/doc-requirements.txt --system
     - uv run --directory "docs" mkdocs build --verbose --site-dir "../public"
-  pages: true # publishes the default public directory
+  artifacts:
+    paths:
+      - public
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH   # Deploy only on main branch
-
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  pages: true
