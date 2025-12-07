@@ -1,0 +1,18 @@
+# 8 Rajapintakuvaus
+
+Tässä luvussa kuvataan Matkahälytysportaalin käyttämät ulkoiset ja sisäiset rajapinnat, niiden käyttötarkoitukset, tietovirrat ja vaatimukset. Rajapintakuvaukset toimivat pohjana testauksen suunnittelulle (Luku 9).
+
+| **Komponentti / Rajapinta**                   | **Tarkoitus**                                | **Protokolla / Muoto** | **Autentikointi**                | **Päivitystiheys / Vasteaika** | **Huomiot**                                              |
+| --------------------------------------------- | -------------------------------------------- | ---------------------- | -------------------------------- | ------------------------------ | -------------------------------------------------------- |
+| **Käyttäjäautentikointi (OAuth2 / JWT)**      | Käyttäjän kirjautuminen ja pääsynhallinta    | HTTPS / JSON           | OAuth2 (Google, Microsoft) + JWT | reaaliaikainen                 | Token-pohjainen; yhteensopiva kalenteripalvelujen kanssa |
+| **Kalenterit (Outlook – Microsoft Graph)**    | Hakee tulevat tapahtumat ja niiden sijainnit | REST / JSON            | OAuth2 (MS Identity)             | reaaliaikainen                 | `GET /me/events`, `GET /me/calendarView`                 |
+| **Kalenterit (Google Calendar)**              | Hakee tapahtumat Google-tililtä              | REST / JSON            | OAuth2 (Google Cloud)            | reaaliaikainen                 | `GET /calendar/v3/calendars/primary/events`              |
+| **iCal / ICS -kalenterit**                    | Lukee tapahtumatiedostoja                    | HTTPS / ICS            | Ei kirjautumista                 | vaihtelee                      | Luetaan aika, paikka, otsikko                            |
+| **FMI Open Data**                             | Sääennusteet, varoitukset, tiesää            | REST / XML / JSON      | API-avain                        | 5–10 min                       | WFS-rajapinta, esim. `fmi::forecast::harmonie`           |
+| **Digitraffic / Fintraffic**                  | Liikennetiedot, tietyöt, kamerat             | REST / JSON            | Avoin                            | 1–5 min                        | `traffic-message`, `maintenance`, `weather`, `cameras`   |
+| **Google Maps API**                           | Reititys, ajoaika, ruuhkat                   | REST / JSON            | API-avain                        | reaaliaikainen                 | `Directions API`, `Distance Matrix API`                  |
+| **HERE Routing API**                          | Reititys ja liikennetiedot                   | REST / JSON            | API-avain                        | reaaliaikainen                 | Routing v8                                               |
+| **OpenStreetMap / OSRM / Mapbox**             | Avoin kartta ja reititys                     | REST / JSON            | Valinnainen avain                | vaihtelee                      | Edullinen vaihtoehto                                     |
+| **Tietokanta – DuckDB / PostgreSQL**          | Matkojen, riskien ja asetusten tallennus     | SQL                    | Sovellustason autentikointi      | välitön                        | Helppo integrointi Pandas/Polars                         |
+| **Ilmoituspalvelut (Web Push / Email / SMS)** | Hälytysten välitys käyttäjälle               | HTTPS / JSON / SMTP    | Token / API-avain                | reaaliaikainen                 | VAPID push, SMTP email, SMS Gateway                      |
+| **Käyttöliittymä – Streamlit / Web App**      | Reittien hallinta ja hälytysten näyttäminen  | HTTPS / WebSocket      | JWT                              | reaaliaikainen                 | Kevyt UI, käyttää backendin REST-pintaa                  |

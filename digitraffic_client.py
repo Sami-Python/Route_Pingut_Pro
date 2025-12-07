@@ -23,9 +23,12 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
     # Lasketaan Bounding Box API-hakua varten
     min_x, min_y, max_x, max_y = route_line.bounds
     
-    # KORJAUS 1: Pyöristetään koordinaatit 4 desimaaliin (f-string :.4f), 
-    # jotta API ei kaadu liian pitkiin desimaaleihin.
+    # KORJAUS 1: Pyöristetään koordinaatit
     bbox_str = f"{min_x-0.2:.4f},{min_y-0.2:.4f},{max_x+0.2:.4f},{max_y+0.2:.4f}"
+
+    # KORJAUS 3: Tarkistetaan alueen koko. Jos liian iso, ei käytetä bboxia ollenkaan.
+    # Digitrafficilla on rajat, ja isoilla alueilla on varmempaa hakea kaikki.
+    bbox_too_large = (max_x - min_x) > 1.5 or (max_y - min_y) > 1.5
 
     url = "https://tie.digitraffic.fi/api/traffic-message/v1/messages"
     headers = {"User-Agent": "StreamlitApp/1.0 (gzip)"}
@@ -33,17 +36,19 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
     params = {
         "inactiveHours": 0,
         "situationType": "TRAFFIC_ANNOUNCEMENT",
-        "includeAreaGeometry": "false",
-        "bbox": bbox_str
+        "includeAreaGeometry": "false"
     }
+    
+    # Käytetään bboxia vain jos alue on järkevän kokoinen
+    if not bbox_too_large:
+        params["bbox"] = bbox_str
 
     try:
         resp = requests.get(url, params=params, headers=headers, timeout=5)
         
-        # KORJAUS 2: Jos API valittaa (esim. alue liian iso 400/413), 
-        # yritetään hakea ilman bbox-rajausta (koko Suomi) ja suodatetaan itse.
-        if resp.status_code in [400, 413, 414]:
-            print("Digitraffic bbox fail, fetching all messages...")
+        # Jos bbox failaa silti, yritetään ilman (fallback)
+        if resp.status_code in [400, 413, 414] and "bbox" in params:
+            # print("Digitraffic bbox fail, fetching all messages...") # Hiljennetään printti
             del params["bbox"]
             resp = requests.get(url, params=params, headers=headers, timeout=10)
             
@@ -87,7 +92,8 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
                     "sijainti": first_ann.get("location", {}).get("description", "Alue"),
                     "aika": props.get("announcementUpdateTime"),
                     "lat": msg_lat,
-                    "lon": msg_lon
+                    "lon": msg_lon,
+                    "id": feature.get("id")
                 })
         except Exception:
             continue
@@ -98,40 +104,29 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
 # 2. KELIKAMERAT (SHAPELY)
 # --------------------------------------------------------------------
 
-def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
-    """
-    Hakee kelikamerat, jotka ovat lähellä reittiä.
-    """
-    if not route_coords:
-        return []
-
-    # Shapely (lon, lat)
-    path_coords_xy = [(p[1], p[0]) for p in route_coords]
-    
-    route_line = LineString(path_coords_xy)
-
-    min_x, min_y, max_x, max_y = route_line.bounds
-    
-    # KORJAUS: Pyöristys tässäkin, Digitrafficin sääkamera-API voi olla tarkka
-    # Kamerat voivat olla kauempana tiestä, isompi marginaali
-    # Emme käytä bboxia API-kutsussa suoraan kaikissa endpointseissa, 
-    # mutta jos käyttäisimme, se pitäisi olla näin:
-    # bbox_str = f"{min_x-0.2:.4f},{min_y-0.2:.4f},{max_x+0.2:.4f},{max_y+0.2:.4f}"
-
+def fetch_weather_cam_data() -> Dict[str, Any]:
+    """Hakee kelikameroiden metatiedot API:sta."""
     url = "https://tie.digitraffic.fi/api/weathercam/v1/stations"
     headers = { "User-Agent": "StreamlitApp/1.0 (gzip)" }
-    
     try:
         resp = requests.get(url, headers=headers, timeout=10)
-        data = resp.json()
+        return resp.json()
     except Exception as e:
         print(f"Camera API error: {e}")
+        return {}
+
+def filter_weather_cameras(route_coords: List[Tuple[float, float]], data: Dict[str, Any], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    """Suodattaa haetut kelikamerat reitin perusteella."""
+    if not route_coords or not data:
         return []
 
+    path_coords_xy = [(p[1], p[0]) for p in route_coords]
+    route_line = LineString(path_coords_xy)
+    min_x, min_y, max_x, max_y = route_line.bounds
+    
     cameras = []
     buffer_degrees = buffer_meters / 111000.0
 
-    # Optimointi: Laske bbox-rajat floatteina valmiiksi
     b_min_x = min_x - 0.2
     b_max_x = max_x + 0.2
     b_min_y = min_y - 0.2
@@ -148,19 +143,15 @@ def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: 
             lon, lat = float(coords_raw[0]), float(coords_raw[1])
             cam_point = Point(lon, lat)
 
-            # 2. Nopea bbox-tarkistus (Python-puolella)
             if not (b_min_x <= lon <= b_max_x and b_min_y <= lat <= b_max_y):
                 continue
 
-            # 3. Tarkka etäisyystarkistus Shapelyllä
             if route_line.distance(cam_point) < buffer_degrees:
-                
                 props = feature.get("properties", {})
                 station_id = props.get("id")
                 presets = props.get("presets", [])
                 
                 image_url = f"https://weathercam.digitraffic.fi/{station_id}01.jpg"
-                
                 if presets:
                     best_preset = next((p for p in presets if "01" in p.get("id", "")), presets[0])
                     if "imageUrl" in best_preset:
@@ -178,45 +169,38 @@ def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: 
 
     return cameras
 
+def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    data = fetch_weather_cam_data()
+    return filter_weather_cameras(route_coords, data, buffer_meters)
+
 # --------------------------------------------------------------------
 # 3. TIESÄÄ (Road Weather)
 # --------------------------------------------------------------------
 
-def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 2000) -> List[Dict[str, Any]]:
-    """
-    Hakee tiesääasemat ja niiden mittaustiedot reitin varrelta.
-    """
-    if not route_coords:
+def fetch_road_weather_data() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    url_meta = "https://tie.digitraffic.fi/api/weather/v1/stations"
+    url_data = "https://tie.digitraffic.fi/api/weather/v1/stations/data"
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    try:
+        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
+        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        return resp_meta.json(), resp_data.json()
+    except Exception as e:
+        print(f"Road Weather API error: {e}")
+        return {}, {}
+
+def filter_road_weather_stations(route_coords: List[Tuple[float, float]], meta_json: Dict, data_json: Dict, buffer_meters: int = 2000) -> List[Dict[str, Any]]:
+    if not route_coords or not meta_json:
         return []
 
     path_coords_xy = [(p[1], p[0]) for p in route_coords]
     route_line = LineString(path_coords_xy)
     
-    # 1. Haetaan asemat (metadata)
-    url_meta = "https://tie.digitraffic.fi/api/weather/v1/stations"
-    # 2. Haetaan data (sensor arvot)
-    url_data = "https://tie.digitraffic.fi/api/weather/v1/stations/data"
-    
-    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
-    
-    try:
-        # Haetaan molemmat rinnakkain tai peräkkäin
-        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
-        resp_data = requests.get(url_data, headers=headers, timeout=10)
-        
-        meta_json = resp_meta.json()
-        data_json = resp_data.json()
-    except Exception as e:
-        print(f"Road Weather API error: {e}")
-        return []
-
-    # Luodaan lookup-taulu datalle: id -> {air, road}
     data_lookup = {}
     for st_data in data_json.get("stations", []):
         sid = st_data.get("id")
         vals = {}
         for s in st_data.get("sensorValues", []):
-            # 1 = Ilman lämpötila, 3 = Tien pinnan lämpötila
             if s["id"] == 1: vals["air_temp"] = s["value"]
             if s["id"] == 3: vals["road_temp"] = s["value"]
         data_lookup[sid] = vals
@@ -236,14 +220,11 @@ def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_me
             if route_line.distance(point) < buffer_degrees:
                 props = feature.get("properties", {})
                 sid = props.get("id")
-                
-                # Haetaan arvot lookupista
                 vals = data_lookup.get(sid, {})
                 
                 raw_name = props.get("name", "Sääasema")
                 clean_name = raw_name.replace("_", " ")
                 
-                # Yritetään parsia kunta ja tie nimestä (esim. vt4_Helsinki_Jakomäki)
                 parts = raw_name.split("_")
                 municipality = ""
                 road_num = ""
@@ -267,28 +248,28 @@ def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_me
 
     return stations
 
-def get_vms_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
-    if not route_coords: return []
+def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 2000) -> List[Dict[str, Any]]:
+    m, d = fetch_road_weather_data()
+    return filter_road_weather_stations(route_coords, m, d, buffer_meters)
+
+def fetch_vms_data() -> Dict[str, Any]:
+    url = "https://tie.digitraffic.fi/api/variable-sign/v1/signs"
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        return resp.json()
+    except Exception as e:
+        print(f"VMS API error: {e}")
+        return {}
+
+def filter_vms_stations(route_coords: List[Tuple[float, float]], data: Dict[str, Any], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    if not route_coords or not data: return []
     
     path_coords_xy = [(p[1], p[0]) for p in route_coords]
     route_line = LineString(path_coords_xy)
     buffer_degrees = buffer_meters / 111000.0
 
-    url = "https://tie.digitraffic.fi/api/variable-sign/v1/signs"
-    headers = { 
-        "User-Agent": "StreamlitApp/1.0 (gzip)",
-        "Accept-Encoding": "gzip"
-    }
-    
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        data = resp.json()
-    except Exception as e:
-        print(f"VMS API error: {e}")
-        return []
-
     vms_points = []
-    
     for feature in data.get("features", []):
         try:
             geom = feature.get("geometry", {})
@@ -302,10 +283,8 @@ def get_vms_stations(route_coords: List[Tuple[float, float]], buffer_meters: int
                 props = feature.get("properties", {})
                 sid = props.get("id")
                 
-                # Etsitään näyttöteksti
                 display_value = props.get("displayValue")
                 if not display_value:
-                    # Jos ei displayValue, kokeillaan textRows
                     rows = props.get("textRows", [])
                     if rows:
                         display_value = " | ".join([r.get("screenText", "") for r in rows])
@@ -324,6 +303,10 @@ def get_vms_stations(route_coords: List[Tuple[float, float]], buffer_meters: int
             continue
             
     return vms_points
+
+def get_vms_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    d = fetch_vms_data()
+    return filter_vms_stations(route_coords, d, buffer_meters)
 
 # --------------------------------------------------------------------
 # 5. KUNNOSSAPITO (Maintenance)
@@ -378,39 +361,31 @@ def get_maintenance_data(route_coords: List[Tuple[float, float]], buffer_meters:
 # 6. LAM (Liikennemäärät)
 # --------------------------------------------------------------------
 
-def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
-    if not route_coords: return []
+def fetch_lam_data() -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    url_meta = "https://tie.digitraffic.fi/api/tms/v1/stations"
+    url_data = "https://tie.digitraffic.fi/api/tms/v1/stations/data"
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
+    try:
+        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
+        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        return resp_meta.json(), resp_data.json()
+    except Exception as e:
+        print(f"LAM API error: {e}")
+        return {}, {}
+
+def filter_lam_stations(route_coords: List[Tuple[float, float]], meta_json: Dict, data_json: Dict, buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    if not route_coords or not meta_json: return []
     
     path_coords_xy = [(p[1], p[0]) for p in route_coords]
     route_line = LineString(path_coords_xy)
     buffer_degrees = buffer_meters / 111000.0
-    
-    # 1. Metadata
-    url_meta = "https://tie.digitraffic.fi/api/tms/v1/stations"
-    # 2. Data
-    url_data = "https://tie.digitraffic.fi/api/tms/v1/stations/data"
-    
-    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
-    
-    try:
-        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
-        resp_data = requests.get(url_data, headers=headers, timeout=10)
-        
-        meta_json = resp_meta.json()
-        data_json = resp_data.json()
-    except Exception as e:
-        print(f"LAM API error: {e}")
-        return []
-        
-    # Lookup: id -> {speed, vol}
+
     data_lookup = {}
     for st_data in data_json.get("stations", []):
         sid = st_data.get("id")
         vals = {}
         for s in st_data.get("sensorValues", []):
-            # 5122=Nopeus1, 5169=Nopeus2
             if s["id"] in [5122, 5169]: vals["speed"] = s["value"]
-            # 5116=Määrä1, 5163=Määrä2
             if s["id"] in [5116, 5163]: vals["volume"] = s["value"]
         data_lookup[sid] = vals
 
@@ -427,8 +402,6 @@ def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int
             if route_line.distance(point) < buffer_degrees:
                 props = feature.get("properties", {})
                 sid = props.get("id")
-                
-                # Haetaan arvot lookupista
                 vals = data_lookup.get(sid, {})
                 
                 results.append({
@@ -443,6 +416,10 @@ def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int
             continue
         
     return results
+
+def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
+    m, d = fetch_lam_data()
+    return filter_lam_stations(route_coords, m, d, buffer_meters)
 
 def get_road_weather_history(station_id: int) -> List[Dict[str, Any]]:
     """

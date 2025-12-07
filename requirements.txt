@@ -12,8 +12,15 @@ streamlit-calendar
 fastapi
 uvicorn
 requests
-msal
 python-dotenv
+numpy
+pandas
+altair
+ics
+arrow
+h3
+scipy
+matplotlib
 pylint
 pytest-cov
 google-api-python-client

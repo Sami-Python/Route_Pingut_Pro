@@ -2,13 +2,24 @@ stages:
   - test
   - deploy   # Pages vaatii, että Pages-job kuuluu 'deploy'-stageen
 
-# Pylint
+# Pylint with HTML report
 pylint:
+  tags:
+    - dind         # Lisätty tagi, jotta job käynnistyy
   stage: test
   script:
     - pip install -r requirements.txt
-    - pylint .
-  allow_failure: true
+    - pip install pylint-json2html
+    - pylint --output-format=json . > pylint-report.json || true
+    - pylint-json2html -f json -o pylint-report.html pylint-report.json
+  artifacts:
+    paths:
+      - pylint-report.html
+      - pylint-report.json
+    expire_in: 7 days
+  allow_failure: true         # ei blokkaa mergeä, mutta raportti syntyy
+  rules:
+    - if: $CI_COMMIT_BRANCH   # ajetaan kaikilla brancheilla
 
 # Pages Deployment
 pages:
