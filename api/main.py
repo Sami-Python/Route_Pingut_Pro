@@ -4,6 +4,7 @@ import os
 from graph_api import app as graph_app
 from ical_api import app as ical_app
 from weather_api import app as weather_app
+from gcal_api import app as gcal_app
 from logger import setup_logging
 
 # Initialize logging (captures prints and writes to api.log)
@@ -15,6 +16,7 @@ app = FastAPI(title="API Gateway", version="1.0.0")
 app.mount("/graph", graph_app)
 app.mount("/ical", ical_app)
 app.mount("/weather", weather_app)
+app.mount("/gcal", gcal_app)
 
 
 @app.get("/")
@@ -36,6 +38,10 @@ async def root():
             "ical_api": {
                 "path": "/ical",
                 "description": "Public iCal calendar integration"
+            },
+            "gcal_api": {
+                "path": "/gcal",
+                "description": "Google Calendar integration"
             },
             "weather_api": {
                 "path": "/weather",
