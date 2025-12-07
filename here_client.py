@@ -42,12 +42,13 @@ def geocode(address: str) -> Optional[Tuple[float, float]]:
 def route(origin: Tuple[float, float], 
           destination: Tuple[float, float], 
           departure_time: str = None, 
+          arrival_time: str = None,
           routing_mode: str = "fastest", 
           avoid_features: List[str] = None,
           alternatives: int = 0) -> Optional[Dict[str, Any]]:
     """
     Hakee reitin HERE Routing v8 API:sta.
-    Tukee nyt myös reititysasetuksia (mode, avoid) ja vaihtoehtoisia reittejä.
+    Tukee nyt myös reititysasetuksia (mode, avoid), saapumisaikaa ja vaihtoehtoisia reittejä.
     """
     url = "https://router.hereapi.com/v8/routes"
     
@@ -66,6 +67,10 @@ def route(origin: Tuple[float, float],
     # Jos lähtöaika on annettu
     if departure_time:
         params["departureTime"] = departure_time
+    
+    # Jos saapumisaika on annettu (yliajaa lähtöajan jos molemmat)
+    if arrival_time:
+        params["arrivalTime"] = arrival_time
 
     # Jos on vältettäviä asioita (esim. ["tollRoad", "ferry"])
     if avoid_features:
