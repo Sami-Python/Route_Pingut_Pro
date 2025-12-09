@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 import msal
 import requests
 from dotenv import load_dotenv
-import utils
+import utils.cal_utils
 
 # Load environment variables
 load_dotenv()
