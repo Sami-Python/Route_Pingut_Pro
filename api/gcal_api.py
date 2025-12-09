@@ -1,5 +1,7 @@
 import os
 import datetime
+import tempfile
+import json
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse
 from google.oauth2.credentials import Credentials
@@ -54,9 +56,9 @@ async def login(request: Request):
 
 @app.get("/callback", name="gcal_callback")
 async def callback(request: Request, code: str):
-
     """
     Handles the OAuth2 callback, exchanges code for token, and redirects to frontend.
+    Uses a temporary file to pass the token to avoid URL parameter loops.
     """
     redirect_uri = str(request.url_for("gcal_callback"))
     print(f"Redirect URI: {redirect_uri}")
@@ -71,15 +73,23 @@ async def callback(request: Request, code: str):
         flow.fetch_token(code=code)
         creds = flow.credentials
         
-        # Redirect to Streamlit app with the token
-        # Using the same env var convention as graph_api.py
+        # Store token in a temporary file instead of URL parameter
+        token_file = os.path.join(tempfile.gettempdir(), "gcal_token_temp.json")
+        with open(token_file, "w") as f:
+            json.dump({
+                "token": creds.token,
+                "timestamp": datetime.datetime.now().isoformat()
+            }, f)
+        print(f"Token stored in: {token_file}")
+        
+        # Redirect to Streamlit app WITHOUT token in URL
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8501")
-        # Pass the access_token to the frontend
-        redirect_url = f"{frontend_url}?access_token={creds.token}"
+        redirect_url = f"{frontend_url}?gcal_auth=success"
         
         return RedirectResponse(url=redirect_url)
 
     except Exception as e:
+        print(f"OAuth callback error: {e}")
         return {"error": str(e)}
 
 @app.get("/calendars")
