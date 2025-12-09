@@ -27,6 +27,17 @@ services:
       - default
   #    - meteo-network
 
+  docs:
+    build:
+      context: .
+      dockerfile: docs.Dockerfile
+    ports:
+      - "80:8000"
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Helsinki
+    networks:
+      - default
   # Define external network reference
   #networks:
   #  meteo-network:

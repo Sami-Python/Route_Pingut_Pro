@@ -20,4 +20,4 @@ COPY strmlt/ .
 EXPOSE 8501
 
 # The command to run the Streamlit app
-CMD ["streamlit", "run", "cal_demo.py"]
+CMD ["streamlit", "run", "main.py"]
