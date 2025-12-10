@@ -11,8 +11,8 @@ from pydantic import BaseModel
 import uvicorn
 
 # Tuodaan client-moduulit
-from here_client import geocode, route, parse_traffic_incidents
-from digitraffic_client import (
+from utils.here_client import geocode, route, parse_traffic_incidents
+from utils.digitraffic_client import (
     get_weather_cameras, 
     traffic_messages_near_route,
     get_road_weather_stations,
@@ -21,8 +21,8 @@ from digitraffic_client import (
     get_lam_stations,
     get_road_weather_history
 )
-from weather_client import get_rainviewer_data, get_closest_timestamp
-from meteo_client import MeteoClient
+from utils.weather_client import get_rainviewer_data, get_closest_timestamp
+from utils.meteo_client import MeteoClient
 import requests
 import datetime
 from ics import Calendar

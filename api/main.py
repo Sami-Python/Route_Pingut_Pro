@@ -6,6 +6,7 @@ from ical_api import app as ical_app
 from weather_api import app as weather_app
 from gcal_api import app as gcal_app
 from logger import setup_logging
+from maps_api import app as maps_app
 
 # Initialize logging (captures prints and writes to api.log)
 setup_logging()
@@ -17,7 +18,7 @@ app.mount("/graph", graph_app)
 app.mount("/ical", ical_app)
 app.mount("/weather", weather_app)
 app.mount("/gcal", gcal_app)
-
+app.mount("/maps", maps_app)
 
 @app.get("/")
 async def root():
@@ -50,6 +51,10 @@ async def root():
             "logs": {
                 "path": "/logs",
                 "description": "API logs"
+            },
+            "maps_api": {
+                "path": "/maps",
+                "description": "Maps API"
             }
         }
     }

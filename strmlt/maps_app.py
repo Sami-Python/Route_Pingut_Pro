@@ -29,8 +29,8 @@ API_URL = os.getenv("API_URL", "http://localhost:8001")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ttm-ollama-server:11434")
 
 # 2. Tuodaan funktiot
-from here_client import geocode, route, parse_traffic_incidents
-from digitraffic_client import (
+from utils.here_client import geocode, route, parse_traffic_incidents
+from utils.digitraffic_client import (
     get_weather_cameras, 
     traffic_messages_near_route, 
     get_road_weather_stations, 
@@ -39,7 +39,7 @@ from digitraffic_client import (
     get_lam_stations,
     get_road_weather_history
 )
-from weather_client import get_rainviewer_data, get_closest_timestamp
+from utils.weather_client import get_rainviewer_data, get_closest_timestamp
 
 # AI Route Analysis
 from route_intelligence import RouteIntelligence
@@ -87,8 +87,10 @@ def _add_ical_events(url: str):
     try:
         # Tässä oletetaan, että meillä on joku API endpoint joka palauttaa JSONia iCal URLista
         # Mutta koska api_server.py:ssä on /ical/events, käytetään sitä jos mahdollista.
-        # Oletetaan, että api_server on pystyssä localhost:8000.
-        resp = requests.get(f"{API_URL}/ical/events", params={"url": url}, timeout=5)
+        # Oletetaan, että api_server on pystyssä localhost:8000. 
+
+        # Korjattu localhost -> api, ovat samassa verkossa dockerissa, localhost osoittaa dockerin itseensä, api on toisessa dockerissa
+        resp = requests.get("http://api:8000/ical/events", params={"url": url}, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             for event in data:
@@ -1002,7 +1004,7 @@ with st.sidebar:
             ).properties(height=200).add_params(selection)
 
             # Render single chart (no layers)
-            chart_selection = st.altair_chart(base, width="stretch", theme="streamlit", on_select="rerun")
+            chart_selection = st.altair_chart(base, theme="streamlit", on_select="rerun")
             
             # Handle selection to update slider
             if len(chart_selection["selection"]) > 0:

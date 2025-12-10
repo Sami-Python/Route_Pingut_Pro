@@ -1,29 +1,60 @@
+# For encoding and decoding flexible polylines (e.g., Google Maps API)
 flexpolyline
+# Web framework for building interactive data apps
 streamlit
+# For rendering interactive 3D maps in Streamlit
 pydeck
+# For evaluating JavaScript in Streamlit apps
 streamlit-js-eval
+# Data validation and settings management using Python type hints
 pydantic
+# For geometric object manipulation and analysis
 shapely
+# A next-generation HTTP client for Python
 httpx
+# A mature full-featured Python testing tool
 pytest
+# For parsing and handling iCal events
 icalevents
+# For parsing and generating iCalendar files
 icalendar
+# Streamlit component for displaying calendars
 streamlit-calendar
+# A modern, fast (high-performance) web framework for building APIs
 fastapi
+# An ASGI web server for Python
 uvicorn
+# For making HTTP requests
 requests
+# For loading environment variables from a .env file
 python-dotenv
+# Fundamental package for scientific computing with Python (numerical operations)
 numpy
+# Data manipulation and analysis library
 pandas
+# Declarative statistical visualization library
 altair
+# For parsing and generating iCalendar files (alternative to icalendar)
 ics
+# A human-friendly datetime library for Python
 arrow
+# Hexagonal hierarchical geospatial indexing system
 h3
+# Scientific computing library for Python
 scipy
+# Comprehensive library for creating static, animated, and interactive visualizations in Python
 matplotlib
+# A static code analyzer for Python
 pylint
+# Pytest plugin for measuring code coverage
 pytest-cov
+# Google API client library for Python
 google-api-python-client
+# Google authentication library for HTTPX
 google-auth-httplib2
+# Google authentication library for OAuth 2.0
 google-auth-oauthlib
 google-generativeai
+
+# Microsoft Authentication Library for Python
+msal
