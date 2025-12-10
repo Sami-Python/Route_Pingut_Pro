@@ -42,8 +42,8 @@ from utils.digitraffic_client import (
 from utils.weather_client import get_rainviewer_data, get_closest_timestamp
 
 # AI Route Analysis
-from route_intelligence import RouteIntelligence
-from ai_analyzer import GeminiRouteAnalyzer
+from utils.route_intelligence import RouteIntelligence
+from utils.ai_analyzer import GeminiRouteAnalyzer
 
 # ====================================================================
 # CALENDAR HELPERS
@@ -1150,7 +1150,7 @@ with b1:
                         
                         # Pre-fetch data ONCE
                         with st.spinner("Ladataan Digitraffic-dataa..."):
-                            from digitraffic_client import (
+                            from utils.digitraffic_client import (
                                 fetch_weather_cam_data, filter_weather_cameras,
                                 fetch_road_weather_data, filter_road_weather_stations,
                                 fetch_vms_data, filter_vms_stations,
@@ -1389,7 +1389,7 @@ if st.session_state.all_routes:
                           temperature_data=current_temp_data,
                           precipitation_data=current_precip_data)
         
-        selection = map_placeholder.pydeck_chart(deck, width="stretch", on_select="rerun", selection_mode="single-object")
+        selection = map_placeholder.pydeck_chart(deck, on_select="rerun", selection_mode="single-object")
         
         # Add precipitation legend below map if layer is enabled
         if layer_settings.get("show_weather") and current_precip_data:
@@ -1485,13 +1485,25 @@ if st.session_state.all_routes:
                                   st.session_state.road_weather, st.session_state.vms, st.session_state.maintenance, st.session_state.lam,
                                   layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity,
                                   temperature_data=play_temp_data, precipitation_data=play_precip_data)
-                map_placeholder.pydeck_chart(deck, width="stretch")
+                map_placeholder.pydeck_chart(deck)
                 time.sleep(0.05)
     
     # Right sidebar panel - AI Analysis
     with sidebar_col:
         st.markdown('<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: white;">', unsafe_allow_html=True)
         st.subheader("🐧 Älykäs reittianalyysi")
+        
+        # Dialog function for AI analysis popup
+        @st.dialog("🤖 AI Reittianalyysi", width="large")
+        def show_ai_analysis_popup():
+            if 'ai_analysis' in st.session_state:
+                st.markdown(st.session_state['ai_analysis'], unsafe_allow_html=False)
+                
+                if 'ai_analysis_time' in st.session_state:
+                    st.caption(f"🕐 Analysoitu: {st.session_state['ai_analysis_time'].strftime('%d.%m.%Y %H:%M')}")
+                
+                if st.button("Sulje", type="primary", use_container_width=True):
+                    st.rerun()
         
         if st.button("🚀 Analysoi", type="primary", use_container_width=True, key="ai_analyze_btn"):
             with st.spinner("Analysoidaan..."):
@@ -1516,19 +1528,28 @@ if st.session_state.all_routes:
                         
                         st.session_state['ai_analysis'] = analysis
                         st.session_state['ai_analysis_time'] = datetime.datetime.now()
+                        st.session_state['show_ai_popup'] = True  # Trigger popup
                         st.rerun()
                 except Exception as e:
                     st.error(f"Virhe: {e}")
+        
+        # Show popup if flag is set
+        if st.session_state.get('show_ai_popup', False):
+            st.session_state['show_ai_popup'] = False  # Reset flag
+            show_ai_analysis_popup()
         
         if 'ai_analysis' in st.session_state:
             st.markdown("---")
             st.markdown(st.session_state['ai_analysis'], unsafe_allow_html=False)
             
-            col1, col2 = st.columns([3, 1])
+            col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
                 if 'ai_analysis_time' in st.session_state:
                     st.caption(f"🕐 {st.session_state['ai_analysis_time'].strftime('%H:%M')}")
             with col2:
+                if st.button("📄 Näytä", use_container_width=True, key="ai_show_popup_btn"):
+                    show_ai_analysis_popup()
+            with col3:
                 if st.button("🗑️", use_container_width=True, key="ai_clear_btn"):
                     del st.session_state['ai_analysis']
                     if 'ai_analysis_time' in st.session_state:

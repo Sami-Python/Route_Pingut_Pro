@@ -5,7 +5,7 @@ Kerää kaikki saatavilla oleva tieto reitiltä AI-analyysiä varten.
 
 from typing import Dict, List, Tuple, Any
 import datetime
-from digitraffic_client import (
+from .digitraffic_client import (
     traffic_messages_near_route,
     get_road_weather_stations,
     get_lam_stations,
