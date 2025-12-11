@@ -316,6 +316,24 @@ with st.expander("Graph API Demo", expanded=False):
                     st.json(response.json())
             except Exception as e:
                 st.error(f"Connection error: {e}")
+                
+    if st.button("Get My Calendars", key="get_graph_calendars"):
+        if not token:
+            st.warning("Please enter a token first.")
+        else:
+            try:
+                response = requests.get(f"{API_BASE_URL}/graph/calendars", params={"token": token})
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    st.success("Successfully fetched calendars!")
+                    with st.expander("Raw Data"):
+                        st.json(data)
+                else:
+                    st.error(f"Error: {response.status_code}")
+                    st.json(response.json())
+            except Exception as e:
+                st.error(f"Connection error: {e}")
 
 with st.expander("Google Calendar demo", expanded=False):
     st.subheader("Google Calendar")

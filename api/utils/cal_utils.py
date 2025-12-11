@@ -16,16 +16,39 @@ def _get_localized_time(time_str: str):
     try:
         dt = datetime.datetime.fromisoformat(time_str)
     except ValueError:
-        # Retry with truncated microseconds if that was the issue (rare but possible)
+        # Handle cases like 7-digit microseconds (Outlook format)
         if '.' in time_str:
-             # Truncate to 6 digits for microseconds as python supports max 6
              base, fraction = time_str.split('.', 1)
-             if len(fraction) > 6 and (fraction[-6:].isdigit() or '+' in fraction or '-' in fraction):
-                  # This simplest approach is complex to get right genericly, 
-                  # but let's try to just fix the specific case of too many digits if known
-                  # For now, presume fromisoformat works for standard inputs
-                  pass
-        raise
+             # Handle Z or offset in fraction
+             if '+' in fraction:
+                 frac_part, offset = fraction.split('+', 1)
+                 offset = '+' + offset
+             elif '-' in fraction:
+                 # Need to be careful not to split negative year, but this is fraction part
+                 # Assuming ISO8601 offset separator
+                 parts = fraction.split('-')
+                 # Last part is likely offset hour if time part is reasonable length
+                 if len(parts) > 1:
+                     frac_part = parts[0]
+                     offset = '-' + '-'.join(parts[1:])
+                 else:
+                     frac_part = fraction
+                     offset = ''
+             elif 'Z' in fraction: # Should be handled by top check but good for robustness
+                 frac_part = fraction.replace('Z', '')
+                 offset = '+00:00'
+             else:
+                 frac_part = fraction
+                 offset = ''
+            
+             if len(frac_part) > 6:
+                 frac_part = frac_part[:6]
+                 time_str = f"{base}.{frac_part}{offset}"
+                 dt = datetime.datetime.fromisoformat(time_str)
+             else:
+                 raise
+        else:
+             raise
 
     if dt.tzinfo is not None:
         return dt.astimezone(helsinki_tz)
