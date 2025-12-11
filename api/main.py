@@ -5,6 +5,7 @@ from graph_api import app as graph_app
 from ical_api import app as ical_app
 from weather_api import app as weather_app
 from gcal_api import app as gcal_app
+from here_maps_api import app as here_maps_app
 from logger import setup_logging
 from maps_api import app as maps_app
 
@@ -18,7 +19,8 @@ app.mount("/graph", graph_app)
 app.mount("/ical", ical_app)
 app.mount("/weather", weather_app)
 app.mount("/gcal", gcal_app)
-app.mount("/maps", maps_app)
+app.mount("/maps", maps_app)app.mount("/here", here_maps_app)
+
 
 @app.get("/")
 async def root():
@@ -47,6 +49,10 @@ async def root():
             "weather_api": {
                 "path": "/weather",
                 "description": "Weather forecast for cities and routes"
+            },
+            "here_maps_api": {
+                "path": "/here",
+                "description": "HERE Maps routing and Digitraffic traffic"
             },
             "logs": {
                 "path": "/logs",
@@ -78,3 +84,4 @@ async def get_logs():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
