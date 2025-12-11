@@ -54,7 +54,8 @@ Tämä moduuli hoitaa Microsoft Outlook -kalenterin integraation.
 | `GET` | `/graph/` | - | Tervetuloviesti. |
 | `GET` | `/graph/login` | - | Aloittaa OAuth2-kirjautumisprosessin. |
 | `GET` | `/graph/callback` | `code` | OAuth2-callback. Hakee access tokenin ja ohjaa takaisin frontendiin tokenin kera. |
-| `GET` | `/graph/events` | `token` | Hakee käyttäjän kalenteritapahtumat Outlookista. |
+| `GET` | `/graph/calendars` | `token` | Hakee käyttäjän kalenterit Outlookista. |
+| `GET` | `/graph/events` | `token`, `calendar_id` (opt) | Hakee käyttäjän kalenteritapahtumat Outlookista. |
 
 ---
 
