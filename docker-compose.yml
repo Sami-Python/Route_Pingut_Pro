@@ -6,6 +6,8 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Helsinki
     networks:
@@ -19,8 +21,11 @@ services:
     ports:
       - "8501:8501"
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - TZ=Europe/Helsinki
+      - API_URL=http://api:8000
     depends_on:
       - api
     networks:

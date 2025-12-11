@@ -54,5 +54,7 @@ google-api-python-client
 google-auth-httplib2
 # Google authentication library for OAuth 2.0
 google-auth-oauthlib
+google-generativeai
+
 # Microsoft Authentication Library for Python
 msal

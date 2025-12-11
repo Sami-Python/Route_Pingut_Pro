@@ -1,17 +1,21 @@
 import streamlit as st
+st.set_page_config(page_title="Reitti Pro", layout="wide")
+
 import flexpolyline
 from typing import Tuple, List, Optional, Dict, Any
 import datetime
 import time
 import math
+import tempfile
+import json
 import pydeck as pdk
 from pydeck.data_utils import compute_view
 from dotenv import load_dotenv, set_key
 import os
 from streamlit_js_eval import get_geolocation
 import requests
-import streamlit_calendar
-from streamlit_calendar import calendar
+# import streamlit_calendar  # REMOVED - causes infinite reruns
+# from streamlit_calendar import calendar  # REMOVED - causes infinite reruns
 import altair as alt
 import pandas as pd
 import numpy as np
@@ -21,7 +25,8 @@ load_dotenv()
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 pdk.settings.mapbox_api_key = MAPBOX_TOKEN
-API_URL = os.getenv("API_URL", "http://localhost:8000")
+API_URL = os.getenv("API_URL", "http://localhost:8001")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ttm-ollama-server:11434")
 
 # 2. Tuodaan funktiot
 from utils.here_client import geocode, route, parse_traffic_incidents
@@ -36,9 +41,44 @@ from utils.digitraffic_client import (
 )
 from utils.weather_client import get_rainviewer_data, get_closest_timestamp
 
+# AI Route Analysis
+from utils.route_intelligence import RouteIntelligence
+from utils.ai_analyzer import GeminiRouteAnalyzer
+
 # ====================================================================
 # CALENDAR HELPERS
 # ====================================================================
+
+@st.cache_data(ttl=300)
+def _add_gcal_events(token: str):
+    """Hakee tapahtumat Google Calendarista."""
+    events = []
+    try:
+        # Oletetaan, että api_server on localhost:8000
+        # Huom: API_URL on määritelty ylempänä
+        resp = requests.get(f"{API_URL}/gcal/events", params={"token": token}, timeout=10)
+        
+        if resp.status_code == 200:
+            data = resp.json()
+            for event in data:
+                evt = {
+                    "title": f"🗓️ {event.get('title', 'No Title')}", # Erotellaan GCal visuaalisesti
+                    "start": event.get("start"),
+                    "end": event.get("end"),
+                    "color": "#4285F4", # Google Blue
+                    "extendedProps": {
+                        "location": event.get("location"),
+                        "source": "google"
+                    }
+                }
+                if event.get("location"):
+                    evt["title"] += f" (@ {event.get('location')})"
+                events.append(evt)
+        elif resp.status_code == 401:
+            return None # Token vanhentunut
+    except Exception as e:
+        print(f"GCal fetch error: {e}")
+    return events
 
 @st.cache_data(ttl=600)
 def _add_ical_events(url: str):
@@ -602,7 +642,7 @@ def clear_search():
 # UI
 # ====================================================================
 
-st.set_page_config(page_title="Reitti Pro", layout="wide")
+
 
 def load_css(file_name):
     try:
@@ -632,21 +672,64 @@ if "is_arrival_mode" not in st.session_state:
     st.session_state.is_arrival_mode = False
 
 if "ui_default_time" not in st.session_state:
-    st.session_state.ui_default_time = (datetime.datetime.now() + datetime.timedelta(minutes=10)).time()
+    # Calculate once and store - don't recalculate on every run
+    default_time = datetime.datetime.now() + datetime.timedelta(minutes=10)
+    st.session_state.ui_default_time = default_time.time()
 
 if st.session_state.all_routes and (not st.session_state.weather_host or not st.session_state.weather_paths):
-    host, ts_dict = get_cached_weather_data()
-    st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
-    st.session_state.weather_paths = ts_dict
-    st.session_state.weather_host = host
-    st.rerun()
+    try:
+        host, ts_dict = get_cached_weather_data()
+        st.session_state.weather_timestamps = sorted(list(ts_dict.keys()))
+        st.session_state.weather_paths = ts_dict
+        st.session_state.weather_host = host
+    except Exception as e:
+        print(f"Weather cache error: {e}")
+
+# --- GOOGLE AUTH HANDLER ---
+# TEMPORARILY DISABLED TO DEBUG LOOP ISSUE
+# Check if returning from OAuth callback
+# if "gcal_auth" in st.query_params and st.query_params["gcal_auth"] == "success":
+#     try:
+#         token_file = os.path.join(tempfile.gettempdir(), "gcal_token_temp.json")
+#         print(f"DEBUG: Checking for token file: {token_file}")
+#         
+#         if os.path.exists(token_file):
+#             with open(token_file, "r") as f:
+#                 token_data = json.load(f)
+#             
+#             token_val = token_data.get("token")
+#             print(f"DEBUG: Token loaded from file. Length: {len(token_val)}")
+#             
+#             # Store in session
+#             st.session_state["gcal_token"] = token_val
+#             st.toast("Kirjauduttu Google-tilille! ✅")
+#             
+#             # Delete the temp file
+#             os.remove(token_file)
+#             print("DEBUG: Token file deleted.")
+#             
+#             # Clear the URL parameter and rerun ONCE
+#             st.query_params.clear()
+#             time.sleep(0.3)
+#             st.rerun()
+#         else:
+#             print("DEBUG: Token file not found!")
+#             st.error("Kirjautuminen epäonnistui - token puuttuu.")
+#             st.query_params.clear()
+#             
+#     except Exception as e:
+#         print(f"DEBUG: Auth Error: {e}")
+#         st.error(f"Kirjautumisvirhe: {e}")
+#         st.query_params.clear()
+
+
+
 
 st.title("Reitti ja Liikenne Pingut Pro 🚗")
 
 if not MAPBOX_TOKEN:
     st.warning("⚠️ MAPBOX_TOKEN puuttuu.")
 
-# --- SIDEBAR ---
 with st.sidebar:
     # --- KALENTERI ---
     with st.expander("📅 Kalenteri", expanded=True):
@@ -655,7 +738,10 @@ with st.sidebar:
         # Tila: Muokataanko vai näytetäänkö tallennettu
         if "edit_ical" not in st.session_state:
             st.session_state.edit_ical = False
-            
+
+        target_url = None
+        
+        # 1. iCal Configuration
         if env_ical and not st.session_state.edit_ical:
             st.success("✅ Kalenteri yhdistetty.")
             if st.button("Vaihda osoite"):
@@ -671,33 +757,115 @@ with st.sidebar:
                     # Tallenna .env tiedostoon
                     env_path = os.path.join(os.getcwd(), ".env")
                     set_key(env_path, "ICAL_URL", ical_input)
-                    os.environ["ICAL_URL"] = ical_input # Päivitä myös nykyiseen prosessiin
+                    os.environ["ICAL_URL"] = ical_input
                     st.session_state.edit_ical = False
                     st.success("Tallennettu!")
                     time.sleep(1)
                     st.rerun()
             
-            # Käytetään syötettä tai demoa esikatseluun
-                click_id = f"{event.get('title')}_{start_str}"
-                last_click = st.session_state.get("last_cal_click")
-                
-                if click_id != last_click:
-                    st.session_state["last_cal_click"] = click_id
+            # Preview input
+            if ical_input:
+                target_url = ical_input
+
+        # 2. Google Calendar Integration
+        st.divider()
+        gcal_events = []
+        if "gcal_token" in st.session_state and st.session_state.gcal_token:
+            st.caption("✅ Google Kalenteri yhdistetty")
+            if st.button("Kirjaudu ulos", key="btn_logout_gcal"):
+                del st.session_state["gcal_token"]
+                st.rerun()
+            
+            # Fetch events
+            gcal_evts = _add_gcal_events(st.session_state.gcal_token)
+            if gcal_evts is None:
+                st.error("Istunto vanhentunut. Kirjaudu uudelleen.")
+                del st.session_state["gcal_token"]
+            else:
+                gcal_events = gcal_evts
+        else:
+                login_link = f"{API_URL}/gcal/login"
+                st.markdown(f"👉 **[Yhdistä Google Kalenteri]({login_link})**", unsafe_allow_html=True)
+
+        # 3. Combine Events
+        events = []
+        if target_url:
+            events.extend(_add_ical_events(target_url))
+        
+        if gcal_events:
+            events.extend(gcal_events)
+
+        # 4. Display Calendar Events
+        # NOTE: streamlit-calendar component causes infinite reruns
+        # Using simple list display instead
+        
+        if events:
+            # Filter to show only future events (today onwards)
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            future_events = []
+            
+            for event in events:
+                start = event.get("start", "")
+                try:
+                    if isinstance(start, str):
+                        dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
+                        # Include events from today onwards
+                        if dt.date() >= now.date():
+                            future_events.append(event)
+                except:
+                    # If parsing fails, include the event anyway
+                    future_events.append(event)
+            
+            if future_events:
+                st.caption(f"📅 {len(future_events)} tulevaa tapahtumaa")
+                for event in future_events[:10]:  # Show max 10 upcoming events
+                    title = event.get("title", "Ei otsikkoa")
+                    start = event.get("start", "")
                     
+                    # Parse and format the date/time
+                    try:
+                        if isinstance(start, str):
+                            dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
+                            date_str = dt.strftime("%d.%m %H:%M")
+                        else:
+                            date_str = str(start)
+                    except:
+                        date_str = str(start)
+                    
+                    # Check if event has location
+                    location = event.get("extendedProps", {}).get("location")
                     if location:
-                        st.session_state["dest_input"] = location
-                        st.session_state["is_arrival_mode"] = True # Set to Arrival Mode
-                        st.toast(f"Määränpää asetettu: {location}")
-                    
-                    if start_str:
-                        try:
-                            # start_str is often ISO string
-                            dt = datetime.datetime.fromisoformat(start_str)
-                            st.session_state["date_input"] = dt.date()
-                            st.session_state["time_sel"] = dt.time()
-                            st.toast(f"Aika asetettu: {dt.strftime('%H:%M')}")
-                        except Exception as e:
-                            print(f"Date parse error: {e}")
+                        st.markdown(f"**{date_str}** - {title}")
+                        if st.button(f"📍 {location}", key=f"loc_{event.get('start')}_{title[:20]}"):
+                            # Set destination
+                            st.session_state["dest_input"] = location
+                            
+                            # Set arrival mode
+                            st.session_state["is_arrival_mode"] = True
+                            
+                            # Set date and time from event
+                            try:
+                                dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
+                                st.session_state["date_input"] = dt.date()
+                                st.session_state["time_sel"] = dt.time()  # Changed from ui_default_time to time_sel
+                                
+                                # Show confirmation
+                                st.toast(f"✅ Määränpää: {location}")
+                                st.toast(f"🕐 Saapumisaika: {dt.strftime('%d.%m.%Y %H:%M')}")
+                                
+                                # Rerun to update form fields
+                                st.rerun()
+                            except Exception as e:
+                                st.toast(f"✅ Määränpää: {location}")
+                                st.warning(f"Määränpää asetettu, mutta aikaa ei voitu asettaa: {e}")
+                    else:
+                        st.markdown(f"**{date_str}** - {title}")
+            else:
+                st.info("Ei tulevia tapahtumia")
+        else:
+            st.info("Ei tulevia tapahtumia")
+
+
 
 
     if st.session_state.selected_camera:
@@ -918,9 +1086,8 @@ with st.container():
         with col_d: date_val = st.date_input("Päivä", key="date_input")
         with col_t: time_val = st.time_input("Kello", st.session_state.ui_default_time, key="time_sel")
         
-        # Time mode selector
-        is_arr = st.checkbox("Aseta saapumisaika", value=st.session_state.is_arrival_mode, key="is_arrival_mode_box")
-        st.session_state.is_arrival_mode = is_arr
+        # Time mode selector - key is directly tied to session state
+        is_arr = st.checkbox("Aseta saapumisaika", key="is_arrival_mode")
         
         target_dt_naive = datetime.datetime.combine(date_val, time_val)
         target_iso = target_dt_naive.astimezone().isoformat(timespec="seconds")
@@ -983,7 +1150,7 @@ with b1:
                         
                         # Pre-fetch data ONCE
                         with st.spinner("Ladataan Digitraffic-dataa..."):
-                            from digitraffic_client import (
+                            from utils.digitraffic_client import (
                                 fetch_weather_cam_data, filter_weather_cameras,
                                 fetch_road_weather_data, filter_road_weather_stations,
                                 fetch_vms_data, filter_vms_stations,
@@ -1222,7 +1389,7 @@ if st.session_state.all_routes:
                           temperature_data=current_temp_data,
                           precipitation_data=current_precip_data)
         
-        selection = map_placeholder.pydeck_chart(deck, width="stretch", on_select="rerun", selection_mode="single-object")
+        selection = map_placeholder.pydeck_chart(deck, on_select="rerun", selection_mode="single-object")
         
         # Add precipitation legend below map if layer is enabled
         if layer_settings.get("show_weather") and current_precip_data:
@@ -1318,14 +1485,79 @@ if st.session_state.all_routes:
                                   st.session_state.road_weather, st.session_state.vms, st.session_state.maintenance, st.session_state.lam,
                                   layer_settings, map_style, w_ts, w_path, st.session_state.weather_host, weather_opacity,
                                   temperature_data=play_temp_data, precipitation_data=play_precip_data)
-                map_placeholder.pydeck_chart(deck, width="stretch")
+                map_placeholder.pydeck_chart(deck)
                 time.sleep(0.05)
     
-    # Right sidebar panel
+    # Right sidebar panel - AI Analysis
     with sidebar_col:
         st.markdown('<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; background: white;">', unsafe_allow_html=True)
-        st.subheader("📊 Lisätiedot")
-        st.info("**TBD**\n\nTähän tulee lisätietoja myöhemmin.")
+        st.subheader("🐧 Älykäs reittianalyysi")
+        
+        # Dialog function for AI analysis popup
+        @st.dialog("🤖 AI Reittianalyysi", width="large")
+        def show_ai_analysis_popup():
+            if 'ai_analysis' in st.session_state:
+                st.markdown(st.session_state['ai_analysis'], unsafe_allow_html=False)
+                
+                if 'ai_analysis_time' in st.session_state:
+                    st.caption(f"🕐 Analysoitu: {st.session_state['ai_analysis_time'].strftime('%d.%m.%Y %H:%M')}")
+                
+                if st.button("Sulje", type="primary", use_container_width=True):
+                    st.rerun()
+        
+        if st.button("🚀 Analysoi", type="primary", use_container_width=True, key="ai_analyze_btn"):
+            with st.spinner("Analysoidaan..."):
+                try:
+                    analyzer = GeminiRouteAnalyzer()
+                    if not analyzer.test_connection():
+                        st.error("❌ Ei yhteyttä Gemini API:in")
+                    else:
+                        selected_idx = st.session_state.selected_route_index
+                        intelligence = RouteIntelligence(
+                            st.session_state.all_routes[selected_idx],
+                            st.session_state.dep_dt
+                        )
+                        route_data = intelligence.collect_all_data()
+                        data_summary = intelligence.summarize_for_ai()
+                        route_summary = st.session_state.route_summaries[selected_idx]
+                        
+                        analysis = analyzer.analyze_route(
+                            data_summary, route_summary,
+                            st.session_state.dep_dt, "", ""
+                        )
+                        
+                        st.session_state['ai_analysis'] = analysis
+                        st.session_state['ai_analysis_time'] = datetime.datetime.now()
+                        st.session_state['show_ai_popup'] = True  # Trigger popup
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Virhe: {e}")
+        
+        # Show popup if flag is set
+        if st.session_state.get('show_ai_popup', False):
+            st.session_state['show_ai_popup'] = False  # Reset flag
+            show_ai_analysis_popup()
+        
+        if 'ai_analysis' in st.session_state:
+            st.markdown("---")
+            st.markdown(st.session_state['ai_analysis'], unsafe_allow_html=False)
+            
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                if 'ai_analysis_time' in st.session_state:
+                    st.caption(f"🕐 {st.session_state['ai_analysis_time'].strftime('%H:%M')}")
+            with col2:
+                if st.button("📄 Näytä", use_container_width=True, key="ai_show_popup_btn"):
+                    show_ai_analysis_popup()
+            with col3:
+                if st.button("🗑️", use_container_width=True, key="ai_clear_btn"):
+                    del st.session_state['ai_analysis']
+                    if 'ai_analysis_time' in st.session_state:
+                        del st.session_state['ai_analysis_time']
+                    st.rerun()
+        else:
+            st.info("Klikkaa 'Analysoi' saadaksesi AI-pohjaisen reittianalyysin.")
+        
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)

@@ -113,6 +113,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- MOUNT ADDITIONAL APIs ---
+import sys
+import os
+
+# Add 'api' folder to path so internal imports in api/*.py work (e.g. import utils)
+sys.path.append(os.path.join(os.path.dirname(__file__), "api"))
+
+try:
+    from gcal_api import app as gcal_app
+    app.mount("/gcal", gcal_app)
+    # Mount Graph API as well for completeness if needed
+    from graph_api import app as graph_app
+    app.mount("/graph", graph_app)
+    print("✅ Google Calendar & Graph APIs mounted successfully.")
+except Exception as e:
+    print(f"⚠️ Failed to mount sub-APIs: {e}")
+
 meteo_client = MeteoClient()
 FINLAND_BBOX = (20.5, 59.5, 31.5, 70.1)
 
