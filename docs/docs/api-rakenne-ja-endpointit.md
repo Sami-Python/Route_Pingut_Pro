@@ -35,8 +35,8 @@ Tämä moduuli hoitaa Google-kalenterin OAuth2-tunnistautumisen ja tapahtumien h
 | Metodi | Polku | Parametrit | Kuvaus |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/gcal/` | - | Tervetuloviesti. |
-| `GET` | `/gcal/login` | - | Aloittaa OAuth2-kirjautumisprosessin ja ohjaa Googlen kirjautumissivulle. |
-| `GET` | `/gcal/callback` | `code` | OAuth2-callback. Vaihtaa koodin access tokeniin ja tallentaa sen väliaikaisesti. Ohjaa takaisin frontendiin. |
+| `GET` | `/gcal/login` | `redirect_url` (opt) | Aloittaa OAuth2-kirjautumisprosessin ja ohjaa Googlen kirjautumissivulle. `redirect_url` määrittää paluuosoitteen kirjautumisen jälkeen. |
+| `GET` | `/gcal/callback` | `code`, `state` | OAuth2-callback. Vaihtaa koodin access tokeniin. Palauttaa tokenin redirect URL:n parametrina (`gcal_access_token`). |
 | `GET` | `/gcal/calendars` | `token` | Listaa käyttäjän kalenterit. Vaatii access tokenin. |
 | `GET` | `/gcal/events` | `token`, `calendar_id` (opt) | Listaa tulevat 10 tapahtumaa valitusta kalenterista. |
 
