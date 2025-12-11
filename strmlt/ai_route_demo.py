@@ -4,6 +4,9 @@ import pydeck as pdk
 import flexpolyline
 import pandas as pd
 from typing import Optional, Tuple, List, Dict, Any
+import dotenv
+import os
+dotenv.load_dotenv()
 
 # ====================================================================
 # CONFIG
@@ -74,6 +77,7 @@ def get_weather_forecast(bbox: Tuple[float, float, float, float]) -> List[Dict]:
 
 def get_ai_summary(api_url: str, prompt: str):
     """Get journey summary from LLM with streaming."""
+    llm_prompt = os.getenv("LLM_PROMPT")
     try:
         # User provides base URL like http://localhost:1234/v1
         # We append the chat completions endpoint
@@ -82,36 +86,7 @@ def get_ai_summary(api_url: str, prompt: str):
         headers = {"Content-Type": "application/json"}
         payload = {
             "messages": [
-                {"role": "system", "content": """
-                Toimi kokeneena logistiikka-asiantuntijana. Analysoi alla oleva reittidata ja anna tiivis yhteenveto seuraavilla ohjeilla:
-
-1. AJOAIKA-ARVIO
-
-Anna arvio muodossa "Xh Ymin".
-
-Vertaa arviota annettuun dataan ja perustele poikkeama tietyypin, rajoitusten tai maantieteellisten seikkojen (esim. kaupunkialueet vs. moottoritie) perusteella.
-
-Huom: Jos reaaliaikaista dataa ei ole, perusta arvio tyypillisiin olosuhteisiin.
-
-2. KRIITTISET PISTEET JA RISKIT
-
-Listaa 3-4 tärkeintä kohtaa, jotka vaativat erityistä huomiota (ruuhkapisteet, tietyöt, haastavat liittymät tai sääherkät alueet).
-
-Älä luettele itsestäänselvyyksiä, vaan etsi todellisia hidasteita.
-
-3. SUOSITUKSET
-
-Anna 2-3 konkreettista toimenpidettä (esim. optimaalinen lähtöaika, reittivalinta tai taukopaikat).
-
-RAJOITUKSET:
-
-Vastaa VAIN suomeksi.
-
-Ei emojeja.
-
-Max 250 sanaa.
-
-Älä toista syötteen tietoja, vaan analysoi niiden merkitystä ajoon."""},
+                {"role": "system", "content": llm_prompt},
                 {"role": "user", "content": prompt}
             ],
             "temperature": 0.7,
