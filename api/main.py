@@ -19,7 +19,8 @@ app.mount("/graph", graph_app)
 app.mount("/ical", ical_app)
 app.mount("/weather", weather_app)
 app.mount("/gcal", gcal_app)
-app.mount("/maps", maps_app)app.mount("/here", here_maps_app)
+app.mount("/maps", maps_app)
+app.mount("/here", here_maps_app)
 
 
 @app.get("/")
