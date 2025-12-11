@@ -1167,8 +1167,8 @@ with b1:
                     with st.spinner("Haetaan sääennusteet..."):
                         try:
                              # Default full Finland BBox from api_server
-                             resp_t = requests.get(f"{API_URL}/api/forecast/temperature", params={"hours": 6})
-                             resp_p = requests.get(f"{API_URL}/api/forecast/weather", params={"hours": 6})
+                             resp_t = requests.get(f"{API_URL_INTERNAL}/maps/api/forecast/temperature", params={"hours": 6})
+                             resp_p = requests.get(f"{API_URL_INTERNAL}/maps/api/forecast/weather", params={"hours": 6})
                              
                              if resp_t.status_code == 200: 
                                  st.session_state.meteo_temp = resp_t.json().get("data", [])
