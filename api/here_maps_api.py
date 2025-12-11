@@ -15,8 +15,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Import client modules from clients subdirectory
-from clients.here_client import geocode, route, parse_traffic_incidents
-from clients.digitraffic_client import (
+from utils.here_client import geocode, route, parse_traffic_incidents
+from utils.digitraffic_client import (
     get_weather_cameras,
     traffic_messages_near_route,
     get_road_weather_stations,

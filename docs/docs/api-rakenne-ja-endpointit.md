@@ -127,3 +127,39 @@ Tämä moduuli tarjoaa yksinkertaistetun sääennusteen kaupungeille ja reiteill
 | `GET` | `/weather/point` | `lat`, `lon`, `hours` | Sääennuste mille tahansa koordinaattipisteelle. |
 | `GET` | `/weather/route-coords` | `from_lat`, `from_lon`, `to_lat`, `to_lon`... | Sääennuste reitin alku- ja loppupisteelle koordinaattien perusteella. |
 | `GET` | `/weather/cities` | - | Listaa tuetut kaupungit koordinaatteineen demo-käyttöä varten. |
+
+---
+
+## 7. HERE Maps & Digitraffic API (Uusi)
+
+Tiedosto: `api/here_maps_api.py`
+Polku: `/here`
+
+Tämä on uudempi, eriytetty moduuli HERE Maps ja Digitraffic -palveluille, joka tarjoaa tarkemmat tyyppimäärittelyt (Pydantic models) ja selkeämmän rakenteen.
+
+### Yleiset
+
+| Metodi | Polku | Parametrit | Kuvaus |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/here/` | - | Palauttaa API:n metatiedot ja endpoint-listauksen. |
+| `GET` | `/here/health` | - | Tarkistaa palvelun tilan ja API-avainten toimivuuden. |
+
+### HERE Maps
+
+| Metodi | Polku | Parametrit | Kuvaus |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/here/geocode` | `address` | Muuttaa osoitteen koordinaateiksi. |
+| `POST` | `/here/route` | Body: `RouteRequest` | Laskee reitin pisteiden välillä. Tukee useita vaihtoehtoisia reittejä (`alternatives`), ja palauttaa reittiviivan (polyline) sekä liikennehäiriöt. |
+
+### Digitraffic (Väylävirasto)
+
+Kaikki Digitraffic-endpointit ottavat syötteenä reittipisteet puolipisteellä eroteltuna stringinä (`lat1,lon1;lat2,lon2;...`).
+
+| Metodi | Polku | Parametrit | Kuvaus |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/here/cameras` | `route_coords` | Hakee kelikamerat reitin läheisyydestä. |
+| `GET` | `/here/messages` | `route_coords` | Hakee liikennehäiriötiedotteet reitin varrelta. |
+| `GET` | `/here/road-weather` | `route_coords` | Hakee tiesääasemat ja niiden mittaustiedot reitin varrelta. |
+| `GET` | `/here/vms` | `route_coords` | Hakee muuttuvat opasteet (VMS) reitin varrelta. |
+| `GET` | `/here/maintenance` | `route_coords` | Hakee käynnissä olevat ja tulevat kunnossapitotehtävät. |
+| `GET` | `/here/lam` | `route_coords` | Hakee liikenteen automaattiset mittausasemat (LAM). |
