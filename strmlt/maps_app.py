@@ -26,6 +26,8 @@ load_dotenv()
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 pdk.settings.mapbox_api_key = MAPBOX_TOKEN
 API_URL = os.getenv("API_URL", "http://localhost:8001")
+API_URL_INTERNAL = "http://api:8000"
+API_URL_EXTERNAL = "http://localhost:8000"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ttm-ollama-server:11434")
 
 # 2. Tuodaan funktiot
@@ -686,41 +688,23 @@ if st.session_state.all_routes and (not st.session_state.weather_host or not st.
         print(f"Weather cache error: {e}")
 
 # --- GOOGLE AUTH HANDLER ---
-# TEMPORARILY DISABLED TO DEBUG LOOP ISSUE
-# Check if returning from OAuth callback
-# if "gcal_auth" in st.query_params and st.query_params["gcal_auth"] == "success":
-#     try:
-#         token_file = os.path.join(tempfile.gettempdir(), "gcal_token_temp.json")
-#         print(f"DEBUG: Checking for token file: {token_file}")
-#         
-#         if os.path.exists(token_file):
-#             with open(token_file, "r") as f:
-#                 token_data = json.load(f)
-#             
-#             token_val = token_data.get("token")
-#             print(f"DEBUG: Token loaded from file. Length: {len(token_val)}")
-#             
-#             # Store in session
-#             st.session_state["gcal_token"] = token_val
-#             st.toast("Kirjauduttu Google-tilille! ✅")
-#             
-#             # Delete the temp file
-#             os.remove(token_file)
-#             print("DEBUG: Token file deleted.")
-#             
-#             # Clear the URL parameter and rerun ONCE
-#             st.query_params.clear()
-#             time.sleep(0.3)
-#             st.rerun()
-#         else:
-#             print("DEBUG: Token file not found!")
-#             st.error("Kirjautuminen epäonnistui - token puuttuu.")
-#             st.query_params.clear()
-#             
-#     except Exception as e:
-#         print(f"DEBUG: Auth Error: {e}")
-#         st.error(f"Kirjautumisvirhe: {e}")
-#         st.query_params.clear()
+# Check for token in query params
+if "gcal_access_token" in st.query_params:
+    try:
+        token = st.query_params["gcal_access_token"]
+        # Store in session
+        st.session_state["gcal_token"] = token
+        st.toast("Kirjauduttu Google-tilille! ✅")
+        
+        # Clear the URL parameter and rerun ONCE
+        st.query_params.clear()
+        time.sleep(0.3)
+        st.rerun()
+            
+    except Exception as e:
+        print(f"DEBUG: Auth Error: {e}")
+        st.error(f"Kirjautumisvirhe: {e}")
+        st.query_params.clear()
 
 
 
@@ -784,7 +768,7 @@ with st.sidebar:
             else:
                 gcal_events = gcal_evts
         else:
-                login_link = f"{API_URL}/gcal/login"
+                login_link = f"{API_URL_EXTERNAL}/gcal/login?redirect_url=http://localhost:8501/maps_app"
                 st.markdown(f"👉 **[Yhdistä Google Kalenteri]({login_link})**", unsafe_allow_html=True)
 
         # 3. Combine Events
