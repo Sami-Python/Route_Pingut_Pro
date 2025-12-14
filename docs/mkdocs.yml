@@ -28,11 +28,12 @@ nav:
       - Arkkitehtuuri: arkkitehtuuri.md
       - Vaatimusmäärittely: vaatimusmaarittely.md
       - Testaussuunnitelma: testaussuunnitelma.md
-      - Rajapintakuvaus: rajapintakuvaus.md
-        - api-rakenne-ja-endpointit.md
+      - Rajapintakuvaus:
+          - Yleiskuva: rajapintakuvaus.md
+          - API-rakenne ja endpointit: api-rakenne-ja-endpointit.md
       - Mikropalvelun käyttöohje: kayttoohje.md
       - Tärkeät linkit: tarkeat-linkit.md
-
+      
 plugins:
   - search
 
