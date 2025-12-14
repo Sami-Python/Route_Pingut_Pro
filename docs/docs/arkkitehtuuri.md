@@ -22,7 +22,6 @@ Ulkoiset palvelut tarjoavat järjestelmälle ajantasaista tietoa liikenne- ja s�
 
 Tietolähteiden käyttö perustuu avoimiin rajapintoihin, ja niiden tarjoama data käsitellään mikropalvelussa ennen kuin se välitetään käyttöliittymälle käyttäjälle esitettäväksi.
 
-
 ## Tiedonkulku kokonaisuudessaan
 
 Käyttäjä tekee toimintoja Streamlit-käyttöliittymässä, joka välittää pyynnöt API Gatewayn kautta taustapalveluille. Taustapalvelut hakevat tarvittavan datan ulkoisista rajapinnoista, käsittelevät sen ja palauttavat tulokset käyttöliittymälle. Kaikki osat toimivat löyhästi kytkettyinä, mikä tukee mikropalveluarkkitehtuurin perusperiaatteita.
