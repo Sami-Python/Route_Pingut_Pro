@@ -1,7 +1,9 @@
-# 9 Testaussuunnitelma: Matkahälytysportaali
-## 9.1 Testauksen tavoitteet ja periaatteet
+# Testaussuunnitelma: Matkahälytysportaali
+## Testauksen tavoitteet ja periaatteet
 
-Testauksen tavoitteena on varmistaa, että Matkahälytysportaalin MVP täyttää sille asetetut toiminnalliset, suorituskyky-, käytettävyys- ja tietoturvavaatimukset. Testaus kattaa sekä frontendin, backendin, integraatiot että ilmoitusmekanismit.
+Testauksen tavoitteena on varmistaa, että Matkahälytysportaalin MVP-versio täyttää sille asetetut toiminnalliset ja ei-toiminnalliset vaatimukset. Testaus keskittyy erityisesti mikropalvelun ydintoiminnallisuuksiin, ulkoisten rajapintojen integraatioihin sekä käyttöliittymän toimivuuteen web-ympäristössä.
+
+MVP-versiossa testaus kohdistuu reaaliaikaiseen tiedonhakuun ja käsittelyyn. Järjestelmä ei sisällä pysyvää tietovarastoa, käyttäjätunnistusta eikä ilmoitusten toimitusta erillisten viestikanavien kautta. Testaus tukee jatkuvaa kehitystä ja laadunvarmistusta osana CI/CD-putkea.
 
 ### Testauksen päätavoitteet
 - Varmistaa, että reittien asetus, laskenta ja muistutukset toimivat luotettavasti.
@@ -20,7 +22,7 @@ Testauksen kohteena ovat:
 - Ilmoituspalvelut
 - Tietokanta (DuckDB / PostgreSQL) (Huom! Ei osta MVP:tä)
 
-## 9.2 Testausympäristö ja työkalut
+## Testausympäristö ja työkalut
 | Osa-alue           | Kuvaus                                               |
 | ------------------ | ---------------------------------------------------- |
 | Käyttöjärjestelmät | Linux, Windows, macOS, iOS/Android selaimet          |
@@ -31,7 +33,7 @@ Testauksen kohteena ovat:
 | Testityökalut      | pytest, pytest-cov, requests-mock, JMeter, GitLab CI |
 | Ilmoituspalvelu    | Web Push, SMTP, SMS Gateway                          |
 
-## 9.3 Testausmenetelmät
+## Testausmenetelmät
 ### 1. Staattinen analyysi (pylint)
 - Suoritetaan kehittäjän koneella ja CI/CD-putkessa.
 - ERROR-luokan virheet estävät merge requestin hyväksymisen.
@@ -58,7 +60,7 @@ Simuloidaan koko prosessi:
 - Kartan ja varoitusten näyttäminen
 - Hälytysten hallinta
 
-## 9.4 Testitapaukset ja hyväksymiskriteerit
+## Testitapaukset ja hyväksymiskriteerit
 | ID   | Käyttötapaus | Testitapaus             | Syöte / Toimenpide        | Odotettu tulos                         |
 | ---- | ------------ | ----------------------- | ------------------------- | -------------------------------------- |
 | TC01 | UC01         | Luo matka manuaalisesti | Syötä lähtö ja määränpää  | Matka tallentuu, hälytys luodaan       |
@@ -75,7 +77,7 @@ Simuloidaan koko prosessi:
 - Push/email/SMS-hälytykset toimitetaan oikeaan aikaan
 - Rajapintojen vasteet ovat skeeman mukaisia
 
-## 9.5 Riskit ja varautuminen
+## Riskit ja varautuminen
 | Riski                               | Vaikutus                           | Varautuminen                      |
 | ----------------------------------- | ---------------------------------- | --------------------------------- |
 | API-yhteys katkeaa                  | Hälytykset voivat viivästyä        | Välimuistitiedot / fallback       |
@@ -84,7 +86,7 @@ Simuloidaan koko prosessi:
 | Push-palvelu epäonnistuu            | Hälytys ei saavu                   | Email/SMS varakanavana            |
 | Sää- tai liikennedata puutteellista | Riskitaso epätarkka                | Konservatiivinen default-logiikka |
 
-## 9.6 Testiprosessi CI/CD-putkessa
+## Testiprosessi CI/CD-putkessa
 '''
 stages:
   - lint

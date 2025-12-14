@@ -1,3 +1,0 @@
-# Projektin päättäminen
-
-Sisältö tulossa.
