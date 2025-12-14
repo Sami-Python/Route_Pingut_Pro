@@ -23,15 +23,16 @@ docs_dir: ./docs
 nav:
   - Docs:
       - Esittely: johdanto.md
-      - Työnkulku: tyonkulku-ja-tietovirrat.md
+      - Työnkulku: projektinhallinta.md
       - Teknologiat: tyokalut-ja-teknologia.md
       - Arkkitehtuuri: arkkitehtuuri.md
       - Vaatimusmäärittely: vaatimusmaarittely.md
       - Testaussuunnitelma: testaussuunnitelma.md
       - Rajapintakuvaus: rajapintakuvaus.md
+        - api-rakenne-ja-endpointit.md
       - Mikropalvelun käyttöohje: kayttoohje.md
       - Tärkeät linkit: tarkeat-linkit.md
-      
+
 plugins:
   - search
 
