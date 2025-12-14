@@ -11,7 +11,7 @@ Näistä vaihtoehdoista tiimi valitsi toteutettavaksi Tiellä liikkujan mikropal
 
 ## Projektitiimi ja työskentelytavat
 
-Projektin toteutuksesta vastaa viiden hengen opiskelijatiimi, johon kuuluvat Sami Hiedanpää, Reetta Ilomäki, Minna Imporanta, Joonas Kitunen ja Mika Kylmäniemi. Tiimi työskentelee ketterästi Scrum-menetelmää hyödyntäen, ja työ etenee sprinttien kautta siten, että tehtävät ja vastuualueet jakautuvat tasaisesti tiimin jäsenten kesken.
+Projektin toteutuksesta vastaa viiden hengen opiskelijatiimi, johon kuuluvat Sami Hiedanpää, Reetta Ilomäki, Minna Imporanta, Joonas Kitunen ja Mika Kylmäniemi. Tiimi työskentelee ketterästi Scrum-menetelmää hyödyntäen, ja työ etenee sprinttien kautta siten, että tehtävät ja vastuualueet jakautuvat mahdollisimman tasaisesti tiimin jäsenten kesken.
 
 Yhteistyössä ja viestinnässä painotetaan avoimuutta ja läpinäkyvyyttä. Kaikki keskeiset päätökset, sprinttien tuotokset sekä projektin aikana esiin nousseet haasteet dokumentoidaan GitLabin issue-järjestelmään ja tiimin blogiin. Viestintäkäytännöt tukevat kannustavaa, ratkaisukeskeistä ja jatkuvaan parantamiseen tähtäävää työskentelytapaa.
 
