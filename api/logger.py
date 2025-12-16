@@ -25,6 +25,9 @@ class PrintLogger:
     def flush(self):
         self.original_stream.flush()
 
+    def isatty(self):
+        return self.original_stream.isatty()
+
 def setup_logging(log_file="api.log"):
     """
     Setup logging to write to a file and capture print() statements.

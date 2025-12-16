@@ -76,15 +76,19 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
                 first_ann = announcements[0] if announcements else {}
 
                 # Koordinaattien haku turvallisesti
-                msg_lat = 0.0
-                msg_lon = 0.0
+                # Koordinaattien haku turvallisesti
+                def get_first_point(coords):
+                    if not coords: return 0.0, 0.0
+                    # If first element is float/int, we are at the point level [lon, lat]
+                    if isinstance(coords[0], (float, int)):
+                         return coords[0], coords[1]
+                    # Recurse down
+                    return get_first_point(coords[0])
+
+                msg_lon, msg_lat = 0.0, 0.0
                 if "coordinates" in feature["geometry"]:
                     c = feature["geometry"]["coordinates"]
-                    # Käsitellään pisteet ja viivat
-                    if isinstance(c[0], float): 
-                        msg_lon, msg_lat = c[0], c[1]
-                    elif isinstance(c[0], list):
-                        msg_lon, msg_lat = c[0][0], c[0][1]
+                    msg_lon, msg_lat = get_first_point(c)
 
                 messages.append({
                     "otsikko": first_ann.get("title", "Liikennetiedote"),
@@ -100,6 +104,74 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
 
     return messages
 
+def traffic_messages_near_point(lat: float, lon: float, radius: float = 50.0) -> List[Dict[str, Any]]:
+    """Hakee liikennetiedotteet tietyn pisteen ympäriltä (säde km)."""
+    # 1 deg ~ 111km
+    radius_deg = radius / 111.0
+    min_lat, max_lat = lat - radius_deg, lat + radius_deg
+    min_lon, max_lon = lon - (radius_deg * 2), lon + (radius_deg * 2)
+    
+    bbox_str = f"{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}" # x,y,x,y
+
+    url = "https://tie.digitraffic.fi/api/traffic-message/v1/messages"
+    headers = {"User-Agent": "StreamlitApp/1.0 (gzip)"}
+    params = {
+        "inactiveHours": 0,
+        "situationType": "TRAFFIC_ANNOUNCEMENT",
+        "includeAreaGeometry": "false",
+        "bbox": bbox_str
+    }
+
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"Digitraffic Message API error: {e}")
+        return []
+
+    messages = []
+    center = Point(lon, lat)
+    
+    for feature in data.get("features", []):
+        try:
+            # Luodaan geometria
+            geom = shape(feature.get("geometry"))
+            # Jos geometria on kaukana keskipisteestä, skipataan (tarkempi tsekkaus)
+            # Yksinkertaistus: jos se on bboxissa, se on mukana.
+            # Mutta voidaan laskea etäisyys jos halutaan tarkka radius.
+            
+            props = feature.get("properties", {})
+            announcements = props.get("announcements", [])
+            first_ann = announcements[0] if announcements else {}
+
+            # Koordinaattien selvitys
+            # Koordinaattien selvitys
+            def get_first_point(coords):
+                if not coords: return 0.0, 0.0
+                if isinstance(coords[0], (float, int)):
+                        return coords[0], coords[1]
+                return get_first_point(coords[0])
+
+            msg_lon, msg_lat = 0.0, 0.0
+            if "coordinates" in feature["geometry"]:
+                c = feature["geometry"]["coordinates"]
+                msg_lon, msg_lat = get_first_point(c)
+
+            messages.append({
+                "otsikko": first_ann.get("title", "Liikennetiedote"),
+                "kuvaus": first_ann.get("comment", "") or first_ann.get("description", ""),
+                "sijainti": first_ann.get("location", {}).get("description", "Alue"),
+                "aika": props.get("announcementUpdateTime"),
+                "lat": msg_lat,
+                "lon": msg_lon,
+                "id": feature.get("id")
+            })
+        except Exception:
+            continue
+
+    return messages
+
 # --------------------------------------------------------------------
 # 2. KELIKAMERAT (SHAPELY)
 # --------------------------------------------------------------------
@@ -107,7 +179,7 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
 def fetch_weather_cam_data() -> Dict[str, Any]:
     """Hakee kelikameroiden metatiedot API:sta."""
     url = "https://tie.digitraffic.fi/api/weathercam/v1/stations"
-    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)" }
+    headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         return resp.json()
@@ -172,6 +244,52 @@ def filter_weather_cameras(route_coords: List[Tuple[float, float]], data: Dict[s
 def get_weather_cameras(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
     data = fetch_weather_cam_data()
     return filter_weather_cameras(route_coords, data, buffer_meters)
+
+def get_weather_cameras_by_point(lat: float, lon: float, radius: float = 50.0) -> List[Dict[str, Any]]:
+    """Hakee kelikamerat tietyn pisteen ympäriltä (säde km)."""
+    data = fetch_weather_cam_data()
+    if not data: return []
+    
+    cameras = []
+    # Karkea laatikkorajaus optimointia varten (1 deg lat ~ 111km)
+    radius_deg = radius / 111.0
+    min_lat, max_lat = lat - radius_deg, lat + radius_deg
+    min_lon, max_lon = lon - (radius_deg * 2), lon + (radius_deg * 2) # Lon vaihtelee enemmän
+    
+    center = Point(lon, lat)
+    
+    for feature in data.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            coords_raw = geom.get("coordinates", [])
+            if not coords_raw or len(coords_raw) < 2: continue
+            
+            c_lon, c_lat = float(coords_raw[0]), float(coords_raw[1])
+            
+            if not (min_lon <= c_lon <= max_lon and min_lat <= c_lat <= max_lat):
+                continue
+                
+            p = Point(c_lon, c_lat)
+            # Distance in degrees approx
+            if center.distance(p) * 111.0 <= radius:
+                 props = feature.get("properties", {})
+                 station_id = props.get("id")
+                 presets = props.get("presets", [])
+                 image_url = f"https://weathercam.digitraffic.fi/{station_id}01.jpg"
+                 if presets:
+                     best = next((p for p in presets if "01" in p.get("id", "")), presets[0])
+                     if "imageUrl" in best: image_url = best["imageUrl"]
+                     
+                 cameras.append({
+                    "id": station_id,
+                    "name": props.get("names", {}).get("fi", "Kelikamera"),
+                    "lat": c_lat,
+                    "lon": c_lon,
+                    "imageUrl": image_url
+                 })
+        except:
+            continue
+    return cameras
 
 # --------------------------------------------------------------------
 # 3. TIESÄÄ (Road Weather)
@@ -251,6 +369,67 @@ def filter_road_weather_stations(route_coords: List[Tuple[float, float]], meta_j
 def get_road_weather_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 2000) -> List[Dict[str, Any]]:
     m, d = fetch_road_weather_data()
     return filter_road_weather_stations(route_coords, m, d, buffer_meters)
+
+def get_road_weather_stations_by_point(lat: float, lon: float, radius: float = 50.0) -> List[Dict[str, Any]]:
+    """Hakee tiesääasemat tietyn pisteen ympäriltä."""
+    m, d = fetch_road_weather_data()
+    if not m: return []
+    
+    data_lookup = {}
+    for st_data in d.get("stations", []):
+        sid = st_data.get("id")
+        vals = {}
+        for s in st_data.get("sensorValues", []):
+            if s["id"] == 1: vals["air_temp"] = s["value"]
+            if s["id"] == 3: vals["road_temp"] = s["value"]
+        data_lookup[sid] = vals
+
+    stations = []
+    radius_deg = radius / 111.0
+    min_lat, max_lat = lat - radius_deg, lat + radius_deg
+    min_lon, max_lon = lon - (radius_deg * 2), lon + (radius_deg * 2)
+    center = Point(lon, lat)
+
+    for feature in m.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            coords_raw = geom.get("coordinates", [])
+            if not coords_raw or len(coords_raw) < 2: continue
+            
+            c_lon, c_lat = float(coords_raw[0]), float(coords_raw[1])
+            if not (min_lon <= c_lon <= max_lon and min_lat <= c_lat <= max_lat):
+                continue
+            
+            p = Point(c_lon, c_lat)
+            if center.distance(p) * 111.0 <= radius:
+                props = feature.get("properties", {})
+                sid = props.get("id")
+                vals = data_lookup.get(sid, {})
+                
+                raw_name = props.get("name", "Sääasema")
+                clean_name = raw_name.replace("_", " ")
+                
+                parts = raw_name.split("_")
+                municipality = ""
+                road_num = ""
+                if len(parts) >= 2:
+                    if parts[0].lower().startswith(("vt", "kt", "st")) or parts[0].isdigit():
+                        road_num = parts[0]
+                        municipality = parts[1]
+
+                stations.append({
+                    "id": sid,
+                    "name": clean_name,
+                    "lat": c_lat,
+                    "lon": c_lon,
+                    "air_temp": vals.get("air_temp"),
+                    "road_temp": vals.get("road_temp"),
+                    "municipality": municipality,
+                    "road_number": road_num
+                })
+        except:
+             continue
+    return stations
 
 def fetch_vms_data() -> Dict[str, Any]:
     url = "https://tie.digitraffic.fi/api/variable-sign/v1/signs"
@@ -420,6 +599,51 @@ def filter_lam_stations(route_coords: List[Tuple[float, float]], meta_json: Dict
 def get_lam_stations(route_coords: List[Tuple[float, float]], buffer_meters: int = 1000) -> List[Dict[str, Any]]:
     m, d = fetch_lam_data()
     return filter_lam_stations(route_coords, m, d, buffer_meters)
+
+def get_lam_stations_by_point(lat: float, lon: float, radius: float = 50.0) -> List[Dict[str, Any]]:
+    """Hakee LAM-asemat säteen sisällä pisteestä geo-etäisyyden perusteella."""
+    m, d = fetch_lam_data()
+    if not m: return []
+
+    data_lookup = {}
+    for st_data in d.get("stations", []):
+        sid = st_data.get("id")
+        vals = {}
+        for s in st_data.get("sensorValues", []):
+            if s["id"] in [5122, 5169]: vals["speed"] = s["value"]
+            if s["id"] in [5116, 5163]: vals["volume"] = s["value"]
+        data_lookup[sid] = vals
+
+    results = []
+    center_point = Point(lon, lat)
+    # Radius in degrees approx (1 deg ~ 111km)
+    buffer_degrees = radius / 111.0 
+
+    for feature in m.get("features", []):
+        try:
+            geom = feature.get("geometry", {})
+            c = geom.get("coordinates", [])
+            if not c or len(c) < 2: continue
+            
+            p_lon, p_lat = float(c[0]), float(c[1])
+            station_point = Point(p_lon, p_lat)
+            
+            if center_point.distance(station_point) <= buffer_degrees:
+                props = feature.get("properties", {})
+                sid = props.get("id")
+                vals = data_lookup.get(sid, {})
+                results.append({
+                    "id": sid,
+                    "name": props.get("names", {}).get("fi", "LAM"),
+                    "lat": p_lat,
+                    "lon": p_lon,
+                    "speed": vals.get("speed"),
+                    "volume": vals.get("volume")
+                })
+        except:
+            continue
+            
+    return results
 
 def get_road_weather_history(station_id: int) -> List[Dict[str, Any]]:
     """

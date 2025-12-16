@@ -9,9 +9,11 @@ void main() async {
   
   // Load environment variables
   try {
-    await dotenv.load(fileName: ".env");
+    await dotenv.load(fileName: "assets/.env");
   } catch (e) {
-    debugPrint('Warning: .env file not found. Using default values.');
+    debugPrint('Warning: .env file not found. Using default values. Error: $e');
+    // Ensure dotenv is initialized to avoid NotInitializedError when accessing .env
+    dotenv.testLoad(fileInput: '');
   }
   
   runApp(
@@ -29,7 +31,7 @@ class ReittProApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Reitti Pro',
+      title: '🐧 Pingut AI Route Planner',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,

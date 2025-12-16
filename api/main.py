@@ -1,17 +1,32 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 import os
-from graph_api import app as graph_app
-from ical_api import app as ical_app
-from weather_api import app as weather_app
-from gcal_api import app as gcal_app
-from logger import setup_logging
-from maps_api import app as maps_app
+from dotenv import load_dotenv
+
+load_dotenv()
+from api.graph_api import app as graph_app
+from api.ical_api import app as ical_app
+from api.weather_api import app as weather_app
+from api.gcal_api import app as gcal_app
+from api.logger import setup_logging
+from api.maps_api import app as maps_app
 
 # Initialize logging (captures prints and writes to api.log)
 setup_logging()
 
 app = FastAPI(title="API Gateway", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+
     
 # Mount the existing APIs to specific paths
 app.mount("/graph", graph_app)

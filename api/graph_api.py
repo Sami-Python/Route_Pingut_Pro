@@ -5,7 +5,7 @@ from fastapi.responses import RedirectResponse
 import msal
 import requests
 from dotenv import load_dotenv
-import utils.cal_utils
+import api.utils.cal_utils as cal_utils
 
 # Load environment variables
 load_dotenv()
@@ -132,7 +132,7 @@ async def get_events(token: str):
     if response.status_code != 200:
         return {"error": "Failed to fetch events", "status": response.status_code, "details": response.json()}
     
-    return utils.get_events_from_outlook(response.json())
+    return cal_utils.get_events_from_outlook(response.json())
     #return response.json()
 
 if __name__ == "__main__":

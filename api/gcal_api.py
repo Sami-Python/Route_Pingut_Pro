@@ -9,7 +9,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from dotenv import load_dotenv
-import utils.cal_utils
+import api.utils.cal_utils as cal_utils
 
 # Load environment variables
 load_dotenv()
@@ -137,7 +137,7 @@ async def get_events(token: str, calendar_id: str = "primary"):
             )
             .execute()
         )
-        return utils.get_events_from_gcal(events_result.get("items", []))
+        return cal_utils.get_events_from_gcal(events_result.get("items", []))
 
     except HttpError as error:
         return {"error": str(error)}

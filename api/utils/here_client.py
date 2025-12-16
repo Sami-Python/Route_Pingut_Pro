@@ -43,7 +43,7 @@ def route(origin: Tuple[float, float],
           destination: Tuple[float, float], 
           departure_time: str = None, 
           arrival_time: str = None,
-          routing_mode: str = "fastest", 
+          routing_mode: str = "fast", 
           avoid_features: List[str] = None,
           alternatives: int = 0) -> Optional[Dict[str, Any]]:
     """
@@ -66,11 +66,12 @@ def route(origin: Tuple[float, float],
 
     # Jos lähtöaika on annettu
     if departure_time:
-        params["departureTime"] = departure_time
+        # HERE API requires ISO8601 without microseconds? Let's slice just in case
+        params["departureTime"] = departure_time.split(".")[0]
     
     # Jos saapumisaika on annettu (yliajaa lähtöajan jos molemmat)
     if arrival_time:
-        params["arrivalTime"] = arrival_time
+        params["arrivalTime"] = arrival_time.split(".")[0]
 
     # Jos on vältettäviä asioita (esim. ["tollRoad", "ferry"])
     if avoid_features:
