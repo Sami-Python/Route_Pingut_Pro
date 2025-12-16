@@ -251,3 +251,6 @@ $RECYCLE.BIN/
 
 # Personal Memo
 #sami_memo.md
+
+# Flutter environment variables
+reitti_pro_mobile/assets/.env
