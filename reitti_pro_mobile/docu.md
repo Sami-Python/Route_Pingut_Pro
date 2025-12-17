@@ -8,6 +8,8 @@ Reitti Pro Mobile on Flutterilla toteutettu mobiilisovellus, joka tarjoaa käytt
 - Liikennetilanteen visualisointi (HERE Traffic)
 - Kelikamerat ja tiesääasemat reitin varrella
 - Sadekartta (RainViewer)
+- **Asetukset:** Koti-osoitteen tallennus ja pikavalinta
+- **Brändätty lataus:** Pyörivä pingviini-animaatio 🐧
 
 ## Arkkitehtuuri
 

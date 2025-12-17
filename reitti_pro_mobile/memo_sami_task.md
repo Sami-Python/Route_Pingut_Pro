@@ -502,10 +502,10 @@ Nämä perustuvat nykyiseen tilaan (Android-build toimii, AI toimii, backend toi
 ### 5A. "Quick Wins" (Nopeat voitot) ⚡
 Parantavat käyttökokemusta heti ja hyödyntävät jo asennettuja kirjastoja (`shared_preferences`, `hive`).
 
-- **Asetukset-näkymä (`SettingsScreen`):**
+- **Asetukset-näkymä (`SettingsScreen`):** ✅ VALMIS
   - Tallenna "Koti", "Työpaikka" ja "Oletuskulkuneuvo" (Auto/Julkiset).
   - Mahdollistaa nopeamman haun.
-- **Loading-tilat (Skeletons):**
+- **Loading-tilat (Skeletons):** ✅ VALMIS
   - Reittihakuun "luuranko"-animaatio tai pyörivä pingviini.
   - Poistaa "tyhjän ruudun" efektin odotusaikana.
 - **Virheiden käsittely (Offline-tila):**

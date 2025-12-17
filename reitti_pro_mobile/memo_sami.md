@@ -682,3 +682,42 @@ APK asennettu fyysiseen laitteeseen ja **TOIMII!** Kartta latautuu, reitit löyt
 ### Seuraavat askeleet
 - Koodin siivous.
 - Mahdollisesti Docker-imagen uudelleenrakennus (`docker build`), jotta "purkkavirityksiä" ei tarvita.
+
+## 17.12.2025 (jatkuu) - Phase 5: Viimeistely ja Julkaisu (Release) 🐧📦 ✨
+
+### Työaika
+- **Aloitus:** 20:00
+- **Lopetus:** 20:30
+- **Yhteensä:** ~30 min
+
+### Tehdyt tehtävät
+
+#### 1. "Quick Wins" & Ominaisuudet
+- **Asetukset-näkymä (`SettingsScreen`):**
+  - Lisätty uusi näyttö, jossa voi tallentaa kotiosoitteen (`SharedPreferences`).
+  - Lisätty `/settings` reitti `GoRouter`iin.
+- **Koti-pikavalinnat:**
+  - Lähtö- ja määränpääkenttiin lisätty "Koti"-ikoni (🏠).
+  - Yhdellä painalluksella täyttää tallennetun osoitteen.
+- **Penguin Loader:**
+  - Korvattu tylsä `CircularProgressIndicator` pyörivällä 🐧-emojilla `HomeScreen`:in hakupainikkeessa.
+  - Luotu oma Widget `PenguinLoader`.
+
+#### 2. Release Build (APK)
+- **Versionosto:** Nostettu `pubspec.yaml` versio `1.0.0+3`.
+- **Clean Build:** Ajettu `flutter clean` varmuuden vuoksi.
+- **APK Luonti:** `flutter build apk --release`.
+- **Tulos:** 21.8 MB APK-tiedosto (`app-release.apk`).
+
+#### 3. Asennus
+- **Komento:** `adb install -r build\app\outputs\flutter-apk\app-release.apk` (päivitysasennus).
+- **Vianmääritys:** Jos `adb` ei löydy polusta, `flutter run --release` tekee saman asian (buildaa + asentaa).
+
+### Tulokset
+✅ Sovellus on nyt paljon henkilökohtaisempi (Koti-osoite).
+✅ Latausanimaatio tuo "Pingut"-brändiä esiin.
+✅ Tuotantoversio on asennettu ja toimii vakaasti.
+
+### Seuraavat askeleet
+- Käyttäjätestaus (meneekö reitit oikein kotiin?).
+- Mahdollisesti iOS-build tulevaisuudessa.
