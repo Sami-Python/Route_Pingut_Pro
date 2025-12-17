@@ -143,10 +143,10 @@ Siirrä se puhelimeen ja asenna!
 2. ✅ Luo projekti
 3. ✅ Kopioi tiedostot
 4. ✅ Testaa sovellus
-5. [ ] Lisää HERE API -integraatio
-6. [ ] Lisää karttaominaisuudet
-7. [ ] Lisää Digitraffic-data
-8. [ ] Testaa oikealla laitteella
+5. ✅ Lisää HERE API -integraatio
+6. ✅ Lisää karttaominaisuudet
+7. ✅ Lisää Digitraffic-data
+8. ✅ Testaa oikealla laitteella
 
 ## 💡 Vinkit
 
