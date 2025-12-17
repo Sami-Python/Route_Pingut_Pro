@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/favorites_service.dart';
+import '../../data/services/storage_service.dart'; // Import StorageService
 import '../widgets/mini_map_widget.dart';
+import '../widgets/penguin_loader.dart'; // Import PenguinLoader
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +19,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _originController = TextEditingController();
   final _destController = TextEditingController();
   final _favoritesService = FavoritesService();
+  final _storageService = StorageService(); // Instance of StorageService
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   bool _isArrivalTime = false;
@@ -343,9 +346,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.settings),
-            onPressed: () {
-              // TODO: Navigate to settings
+            onPressed: () async {
+               await context.pushNamed('settings');
+               // Refresh state if needed when returning
             },
+            tooltip: 'Asetukset',
           ),
         ],
       ),
@@ -375,6 +380,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    IconButton(
+                      icon: const Icon(Icons.home, color: Colors.blue), // Home icon
+                      tooltip: 'Koti',
+                      onPressed: () async {
+                        final home = await _storageService.getHomeAddress();
+                        if (home != null && home.isNotEmpty) {
+                          setState(() {
+                            _originController.text = home;
+                            _useCurrentLocation = false;
+                          });
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Kotiosoitetta ei asetettu. Käy asetuksissa! ⚙️')),
+                            );
+                          }
+                        }
+                      },
+                    ),
                     if (_favorites.isNotEmpty)
                       IconButton(
                         icon: const Icon(Icons.star, color: Colors.amber),
@@ -400,13 +424,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 labelText: 'Määränpää',
                 hintText: 'Esim. Tampere',
                 prefixIcon: const Icon(Icons.flag),
-                suffixIcon: _favorites.isNotEmpty
-                    ? IconButton(
+                suffixIcon: Row(
+                  mainAxisSize: MainAxisSize.min, // Fix row width
+                  children: [
+                     IconButton(
+                      icon: const Icon(Icons.home, color: Colors.blue), // Home icon for Dest too
+                      tooltip: 'Koti',
+                      onPressed: () async {
+                        final home = await _storageService.getHomeAddress();
+                        if (home != null && home.isNotEmpty) {
+                          setState(() => _destController.text = home);
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Kotiosoitetta ei asetettu. Käy asetuksissa! ⚙️')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                    if (_favorites.isNotEmpty)
+                      IconButton(
                         icon: const Icon(Icons.star, color: Colors.amber),
                         tooltip: 'Valitse suosikki',
                         onPressed: () => _showFavoritePicker(isOrigin: false),
-                      )
-                    : null,
+                      ),
+                  ]
+                ),
               ),
             ),
             const SizedBox(height: 24),
@@ -467,11 +511,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             // Search button
             ElevatedButton.icon(
               icon: _isLoading 
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
+                  ? const PenguinLoader(size: 24) // Penguin Loader!
                   : const Icon(Icons.search),
               label: Text(_isLoading ? 'Haetaan...' : 'Hae reitti'),
               onPressed: _isLoading ? null : _searchRoute,

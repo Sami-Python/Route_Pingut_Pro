@@ -491,4 +491,39 @@ Näytä käyttäjälle mielenkiintoisia tilastoja.
 
 ---
 
-**Seuraava päivitys:** Kun ensimmäinen ominaisuus toteutettu
+**Seuraava päivitys:** 17.12.2025
+
+---
+
+## 5️⃣ Phase 5 - Ammattimainen Viimeistely (17.12.2025 Roadmap) 🚀
+
+Nämä perustuvat nykyiseen tilaan (Android-build toimii, AI toimii, backend toimii).
+
+### 5A. "Quick Wins" (Nopeat voitot) ⚡
+Parantavat käyttökokemusta heti ja hyödyntävät jo asennettuja kirjastoja (`shared_preferences`, `hive`).
+
+- **Asetukset-näkymä (`SettingsScreen`):**
+  - Tallenna "Koti", "Työpaikka" ja "Oletuskulkuneuvo" (Auto/Julkiset).
+  - Mahdollistaa nopeamman haun.
+- **Loading-tilat (Skeletons):**
+  - Reittihakuun "luuranko"-animaatio tai pyörivä pingviini.
+  - Poistaa "tyhjän ruudun" efektin odotusaikana.
+- **Virheiden käsittely (Offline-tila):**
+  - "Ei verkkoyhteyttä" -ilmoitus kaatumisen sijaan.
+
+### 5B. Ominaisuuksien Syventäminen 🧠
+- **Puheohjaus / AI Ääni:**
+  - AI kertoo reittianalyysin ääneen (`flutter_tts`).
+  - "Huomio: Reitilläsi on sumua Turun kohdalla".
+- **Reittihistoria:**
+  - Tallenna aiemmat haut paikallisesti (Hive-tietokanta).
+  - "Viimeisimmät haut" -lista etusivulle.
+- **Reaaliaikainen seuranta (Navigointi-lite):**
+  - Päivitä "Olet tässä" -pallo reitillä sijainnin muuttuessa.
+
+### 5C. Tekninen Ammattimaisuus (DevOps) 🛠️
+- **Docker-imagen "kovetus":**
+  - Päivitä `Dockerfile` ja `requirements.txt` sisältämään kaikki riippuvuudet (`msal`, `streamlit-calendar` jne).
+  - Poistaa tarpeen ajaa `pip install` kontin sisällä.
+- **Automaattiset testit:**
+  - Lisää Flutter yksikkötestejä (`flutter test`) kriittisille komponenteille.
