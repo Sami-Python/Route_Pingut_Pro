@@ -8,7 +8,7 @@ from typing import Tuple, Optional, Dict, Any
 
 # Asetukset ja API-avain
 # HUOM: Korvaa tämä oikealla HERE API -avaimellasi!
-HERE_API_KEY = "OQFZ4YGejiwxEtYlxNyHqgebBUb4vdmuER3qYcAzx5A"
+HERE_API_KEY = "......"
 # ====================================================================
 
 # --------------------------------------------------------------------
