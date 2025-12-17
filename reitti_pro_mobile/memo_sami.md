@@ -10,7 +10,7 @@
 source .venv/Scripts/activate
 streamlit: uvicorn api.main:app --reload
 PowerShell Android: flutter run
-Bash Android: uvicorn api.main:app --reload --host 0.0.0.0
+*Bash Android: uvicorn api.main:app --reload --host 0.0.0.0*
 
 uuden version työntö puhelimeen PowerShell-> 
 \reitti_pro_mobile> 
@@ -637,3 +637,48 @@ APK asennettu fyysiseen laitteeseen ja **TOIMII!** Kartta latautuu, reitit löyt
 ### Seuraavat askeleet
 - Koodin siivous ja refaktorointi tarvittaessa.
 - Mahdolliset lisäominaisuudet (esim. tarkemmat ruuhkatiedot reiteille).
+
+## 17.12.2025 - Streamlit Dockeraus, Android-korjaukset ja Yhteysongelmat 🛠️📱🐳
+
+### Työaika
+- **Aloitus:** 15:30
+- **Lopetus:** 20:00
+- **Yhteensä:** ~4.5 tuntia
+
+### Tehdyt tehtävät
+
+#### 1. Streamlit App & Docker 🐳
+- **Tavoite:** Saada `strmlt`-sovellus (erityisesti `main.py` ja `ai_route_demo.py`) toimimaan sekä lokaalisti että Dockerissa.
+- **Haaste:** `here-streamlit` Docker-image oli vanhentunut -> puuttui `main.py` ja uudet riippuvuudet (`streamlit-calendar`, `python-dotenv`).
+- **Ratkaisu:**
+  - Ajettiin kontti mounttaamalla paikallinen kansio (`-v c:/...:/app`), jolloin koodimuutokset näkyvät heti.
+  - Asennettiin puuttuvat paketit ajonaikaisesti kontin sisään.
+  - Varmistettiin, että `ai_route_demo.py` on navigaatiossa mukana.
+
+#### 2. Android App Kaatuminen (Geolocator) 📍💥
+- **Ongelma:** Sovellus kaatui heti käynnistyksessä tai fokuksen kadotessa ("Lost connection to device"). Lokit: `Detaching Geolocator`.
+- **Syy:** Android 10+ vaatii `ACCESS_BACKGROUND_LOCATION` -luvan, jos sijaintia käytetään backgroundissa, ja `FOREGROUND_SERVICE` -luvan palveluille. Nämä puuttuivat manifestista.
+- **Ratkaisu:** Lisättiin puuttuvat luvat `android/app/src/main/AndroidManifest.xml`:ään.
+- **Oppiminen:** Mobiilikehityksessä luvat ovat kriittisiä ja käyttöjärjestelmä tappaa sovelluksen armotta, jos ne puuttuvat.
+
+#### 3. Backend Yhteysongelma (Android -> PC) 🔌
+- **Ongelma:** Android-sovellus sai `Connection timeout` -virheen, vaikka IP oli oikein (`192.168.1.130`).
+- **Diagnostiikka:**
+  - `netstat` paljasti, että backend kuunteli vain `127.0.0.1` (localhost), johon ulkoa ei pääse.
+  - Lisäksi portissa 8000 roikkui "zombie"-prosessi.
+  - Uudelleenkäynnistysyritys epäonnistui `ModuleNotFoundError: msal` -virheeseen.
+- **Syy (MSAL):** `uvicorn`-komento ajettiin globaalista ympäristöstä, ei virtuaaliympäristöstä (`.venv`), jossa `msal` oli asennettuna.
+- **Ratkaisu:**
+  1. Tappoimme zombie-prosessit.
+  2. Käynnistimme backendin **oikeasta ympäristöstä** ja **oikealla hostilla**:
+     `.venv\Scripts\python -m uvicorn api.main:app --reload --host 0.0.0.0`
+- **Oppiminen:** "It works on my machine" johtuu usein siitä, että kuunnellaan vain localhostia. Mobiilikehityksessä backendin pitää olla avoin verkkoon (`0.0.0.0`).
+
+### Tulokset
+✅ Streamlit app toimii Dockerissa ja lokaalisti.
+✅ Android-sovellus pysyy pystyssä (ei kaadu).
+✅ Android-sovellus saa yhteyden backendiin ja hakee reittejä/säätä.
+
+### Seuraavat askeleet
+- Koodin siivous.
+- Mahdollisesti Docker-imagen uudelleenrakennus (`docker build`), jotta "purkkavirityksiä" ei tarvita.
