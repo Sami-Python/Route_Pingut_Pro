@@ -206,4 +206,57 @@ class ApiClient {
       return "Analyysi epäonnistui. Tarkista internet-yhteys tai palvelimen tila.";
     }
   }
+
+  // Route Weather (Start & End)
+  Future<Map<String, dynamic>> getRouteWeather({
+    required double fromLat,
+    required double fromLon,
+    required double toLat,
+    required double toLon,
+    String? departureTime,
+  }) async {
+    try {
+      print('📡 [ApiClient] Requesting weather for route...');
+      final response = await _dio.get(
+        '/weather/route-coords',
+        queryParameters: {
+          'from_lat': fromLat,
+          'from_lon': fromLon,
+          'to_lat': toLat,
+          'to_lon': toLon,
+          if (departureTime != null) 'start_time': departureTime,
+        },
+      );
+      print('📡 [ApiClient] Response status: ${response.statusCode}');
+      return response.data;
+    } catch (e) {
+      print('❌ [ApiClient] Weather fetch failed: $e');
+      return {}; // Return empty map on failure to not block UI
+    }
+  }
+
+  // Rain Radar Config
+  Future<Map<String, dynamic>> getRadarConfig() async {
+    try {
+      final response = await _dio.get('/weather/radar/config');
+      return response.data;
+    } catch (e) {
+      print('Failed to get radar config: $e');
+      return {};
+    }
+  }
+
+  // Batch Route Weather (Intervals)
+  Future<List<dynamic>> getBatchWeather(List<Map<String, dynamic>> points) async {
+    try {
+      final response = await _dio.post(
+        '/weather/batch',
+        data: points,
+      );
+      return response.data;
+    } catch (e) {
+      print('Failed to get batch weather: $e');
+      return [];
+    }
+  }
 }

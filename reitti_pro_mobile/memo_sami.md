@@ -721,3 +721,52 @@ APK asennettu fyysiseen laitteeseen ja **TOIMII!** Kartta latautuu, reitit löyt
 ### Seuraavat askeleet
 - Käyttäjätestaus (meneekö reitit oikein kotiin?).
 - Mahdollisesti iOS-build tulevaisuudessa.
+
+## 2025-12-18 - Matkan Sää ja Sadetutka 🌦️🐧
+
+### Työaika
+- **Aloitus:** 18:00
+- **Lopetus:** 19:15
+- **Yhteensä:** ~1h 15min
+
+### Tehdyt tehtävät
+
+#### 1. Sadetutkan (RainViewer) korjaus
+- **Ongelma:** Tutkakuva näkyi kartalla, mutta debuggaus oli vaikeaa.
+- **Korjaus:** Lisätty tarkempi lokitus (`logging`) timestampien hakuun.
+- **Tila:** Toimii, näyttää sateet 0.7 opasiteetilla.
+
+#### 2. Matkan Sää -ikonit (Route Weather Markers)
+- **Tavoite:** Näyttää sääennuste **reitin varrella** eikä vain lähtö/päätepisteessä.
+- **Toteutus (Backend):**
+  - Uusi endpoint `POST /weather/batch`, joka ottaa listan koordinaatteja ja aikoja.
+  - Hakee Open-Meteo dataa backend-proxyn kautta.
+- **Toteutus (Mobiili):**
+  - **Otanta:** Reitti samplataan (Lähtö, 25%, 50%, 75%, Maali). Lyhyillä matkoilla (<1h) vain alku/loppu.
+  - **Aikalogiikka:** Jokaiselle pisteelle lasketaan arvioitu ajoaika (`Lähtöaika + Matkan_kesto * %`).
+    - *Esim.* Jos olet puolimatkassa 1h kuluttua, sää haetaan 1h päähän.
+  - **Visualisointi:** Ikonit kartalla.
+
+#### 3. Interaktiivisuus
+- **Ominaisuus:** Klikkaamalla sääikonia aukeaa infoikkuna.
+- **Tiedot:**
+  - 📍 Arvioitu ohitusaika
+  - 🌡️ Lämpötila
+  - 🌧️ Sademäärä
+  - 📝 Sanallinen kuvaus (esim. "räntää")
+
+### Tulokset
+✅ Reittisuunnittelu on nyt "aikatietoinen". Sää ei ole vain "nyt", vaan "silloin kun olen siellä".
+✅ Backend palvelee tehokkaasti batch-pyyntöjä.
+✅ Käyttökokemus parani merkittävästi interaktiivisuuden myötä.
+
+### Seuraavat askeleet
+- Mahdollisesti varoitukset kovasta sateesta/tuulesta reitillä.
+
+#### 4. Älykkäät Varoitukset (Smart Warnings) ⚠️
+- **Ominaisuus:** Sovellus analysoi säädatan ja varoittaa vaarasta.
+- **Kriteerit:**
+  - 🌧️ Rankkasade (> 2.0 mm/h)
+  - ❄️ Liukas keli (Pakkanen + Sade)
+  - 💨 Kova tuuli (> 15 m/s, vaati backend-muutoksen `wind_speed`)
+- **UI:** Punainen "Pilleri" kartalla, jos vaaraa havaitaan. Yläpalkissa (i)-nappi selitteille.

@@ -8,6 +8,7 @@ class RouteInfoCard extends StatefulWidget {
   final DateTime departureTime;
   final VoidCallback onAnalyzePressed;
   final VoidCallback onSharePressed;
+  final VoidCallback onDetailsPressed;
 
   const RouteInfoCard({
     super.key,
@@ -16,6 +17,7 @@ class RouteInfoCard extends StatefulWidget {
     required this.departureTime,
     required this.onAnalyzePressed,
     required this.onSharePressed,
+    required this.onDetailsPressed,
   });
 
   @override
@@ -75,6 +77,18 @@ class _RouteInfoCardState extends State<RouteInfoCard> {
               ),
               if (_isExpanded) ...[
                 const Divider(height: 24),
+                
+                // Weather / Details Button
+                ElevatedButton.icon(
+                  onPressed: widget.onDetailsPressed,
+                  icon: const Icon(Icons.info_outline),
+                  label: const Text("Reitin tiedot & Sää"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
                 FilledButton.icon(
                   onPressed: widget.onAnalyzePressed,
                   icon: const Icon(Icons.auto_awesome, color: Colors.yellowAccent),

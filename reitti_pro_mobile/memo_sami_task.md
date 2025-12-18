@@ -218,7 +218,7 @@ AI ehdottaa parempia lähtöaikoja ja vaihtoehtoisia reittejä.
 
 ---
 
-### 3B. Sääennuste reitille
+### 3B. Sääennuste reitille ✅ VALMIS
 
 #### Tavoite
 Näytä sääennuste reitin varrella ja varoita huonosta säästä.

@@ -1,166 +1,104 @@
-# Flutter Reitti Pro Mobile - Asennusohje
+# 🐧 Pingut Reitti Pro Mobile
 
-## 📋 Tiedostorakenne
+**Pingut Reitti Pro** on autoilijan älykäs matkakumppani, joka yhdistää reittioppaan, reaaliaikaiset kelikamerat, liikenssätiedot ja tekoälypohjaisen reittianalyysin yhteen helppokäyttöiseen mobiilisovellukseen.
 
-Kaikki lähdetiedostot on luotu kansioon `flutter_source_files/`. Ne täytyy kopioida oikeisiin paikkoihin Flutter-projektin luomisen jälkeen.
+## ✨ Ominaisuudet
 
-### Tiedostojen sijoitus:
+### 🗺️ Reititys & Kartta
+- **Reittihaku:** Tehokas reittihaku HERE Maps API:n avulla.
+- **Interaktiivinen kartta:** OpenStreetMap-pohjainen kartta (Flutter Map).
+- **Vaihtoehtoiset reitit:** Näyttää jopa 3 reittivaihtoehtoa valittavaksi.
+- **Reitin jakaminen:** Jaa reittisi helposti ystäville.
 
-```
-flutter_source_files/
-├── main.dart                                    → lib/main.dart
-├── core_theme_app_theme.dart                    → lib/core/theme/app_theme.dart
-├── core_router_app_router.dart                  → lib/core/router/app_router.dart
-├── data_services_api_client.dart                → lib/data/services/api_client.dart
-├── presentation_screens_home_screen.dart        → lib/presentation/screens/home_screen.dart
-├── presentation_screens_map_screen.dart         → lib/presentation/screens/map_screen.dart
-└── presentation_screens_route_details_screen.dart → lib/presentation/screens/route_details_screen.dart
-```
+### 🚗 Liikenne & Olosuhteet
+- **Kelikamerat:** Reaaliaikaiset kuvat reitin varrelta (Digitraffic).
+- **Tiesääasemat:** Tarkat säätiedot tieltä.
+- **Liikennetiedotteet:** Varoitukset tietyöistä, onnettomuuksista ja ruuhkista.
+- **LAM-pisteet:** Ajoneuvojen määrät ja keskinopeudet mittauspisteistä.
 
-## 🚀 Asennusvaiheet
+### 🤖 Älykäs Analyysi
+- **AI-reittianalyysi:** Google Gemini 1.5 Flash analysoi reitin olosuhteet, sään ja liikenteen, ja antaa sanallisen yhteenvedon ja suosituksia.
 
-### 1. Asenna Flutter
+### 📱 Käyttökokemus
+- **Suosikkipaikat:** Tallenna usein käytetyt kohteet (Koti, Työ, jne.) nopeaa hakua varten.
+- **Material 3 Design:** Moderni ja selkeä käyttöliittymä.
+- **Android APK:** Valmis tuotantokelpoinen Android-sovellus.
 
-**Windows:**
-1. Lataa Flutter SDK: https://docs.flutter.dev/get-started/install/windows
-2. Pura zip-tiedosto (esim. `C:\src\flutter`)
-3. Lisää PATH: `C:\src\flutter\bin`
-4. Asenna Android Studio tai VS Code + Flutter extension
-5. Tarkista: `flutter doctor`
+---
 
-### 2. Luo Flutter-projekti
+## 🛠️ Asennus ja Käynnistys
 
+### Vaatimukset
+- **Flutter SDK** (3.x tai uudempi)
+- **Python 3.9+** (Backendille)
+- **Android Studio / VS Code**
+- **Android-laite tai emulaattori**
+
+### 1. Backendin Käynnistys
+Sovellus tarvitsee toimiakseen Python-pohjaisen backendin (Pingut API).
+
+**Vaihtoehto A: Manuaalinen käynnistys (Suositeltu kehitykseen)**
 ```bash
-cd c:\Users\samih\code\pingut-projekti-4
-flutter create reitti_pro_mobile
-cd reitti_pro_mobile
+# Projektin juuressa (c:\Users\samih\code\pingut-projekti-4)
+pip install -r requirements.txt
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. Korvaa pubspec.yaml
-
+**Vaihtoehto B: Docker**
 ```bash
-# Kopioi flutter_source_files/../pubspec.yaml projektin juureen
-copy ..\pubspec.yaml pubspec.yaml
+docker compose up -d api
 ```
 
-### 4. Luo kansiorakenne
+### 2. Mobiilisovelluksen Käynnistys
 
-```bash
-mkdir lib\core\theme
-mkdir lib\core\router
-mkdir lib\data\services
-mkdir lib\presentation\screens
-mkdir lib\presentation\widgets
-```
+1. **Siirry mobiilikansioon:**
+   ```bash
+   cd reitti_pro_mobile
+   ```
 
-### 5. Kopioi lähdetiedostot
+2. **Luo `.env` tiedosto:**
+   Luo tiedosto `reitti_pro_mobile/.env` ja määritä seuraavat muuttujat:
+   ```env
+   # Android-emulaattorille:
+   API_URL=http://10.0.2.2:8000
+   
+   # Oikealle laitteelle (vaihda IP-osoite tietokoneesi lähiverkon IP:ksi):
+   # API_URL=http://192.168.1.X:8000
+   
+   HERE_API_KEY=<sinun_here_api_key>
+   MAPBOX_TOKEN=<sinun_mapbox_token> 
+   GEMINI_API_KEY=<sinun_gemini_api_key>
+   ```
 
-**PowerShell:**
-```powershell
-# Main
-copy flutter_source_files\main.dart lib\main.dart
+3. **Asenna riippuvuudet:**
+   ```bash
+   flutter pub get
+   ```
 
-# Core
-copy flutter_source_files\core_theme_app_theme.dart lib\core\theme\app_theme.dart
-copy flutter_source_files\core_router_app_router.dart lib\core\router\app_router.dart
+4. **Käynnistä sovellus:**
+   ```bash
+   flutter run
+   ```
 
-# Data
-copy flutter_source_files\data_services_api_client.dart lib\data\services\api_client.dart
+---
 
-# Screens
-copy flutter_source_files\presentation_screens_home_screen.dart lib\presentation\screens\home_screen.dart
-copy flutter_source_files\presentation_screens_map_screen.dart lib\presentation\screens\map_screen.dart
-copy flutter_source_files\presentation_screens_route_details_screen.dart lib\presentation\screens\route_details_screen.dart
-```
+## 📁 Projektin Rakenne (`lib/`)
 
-### 6. Luo .env tiedosto
+- **`main.dart`**: Sovelluksen käynnistyspiste.
+- **`core/`**: Yleiset apuohjelmat, teemat ja reititys (`AppRouter`, `AppTheme`).
+- **`data/`**: Tietoliikenne ja tallennus (`ApiClient`, `StorageService`).
+- **`presentation/`**: Käyttöliittymä.
+  - **`screens/`**: Näytöt (`HomeScreen`, `MapScreen`, `RouteDetailsScreen`).
+  - **`widgets/`**: Uudelleenkäytettävät komponentit.
 
-Luo projektin juureen `.env` tiedosto:
-
-```
-API_URL=http://10.0.2.2:8000
-HERE_API_KEY=<kopioi_olemassa_olevasta_.env>
-MAPBOX_TOKEN=<kopioi_olemassa_olevasta_.env>
-GEMINI_API_KEY=<kopioi_olemassa_olevasta_.env>
-```
-
-**Huom:** `10.0.2.2` on Android-emulaattorin localhost-osoite
-
-### 7. Asenna riippuvuudet
-
-```bash
-flutter pub get
-```
-
-### 8. Käynnistä sovellus
-
-**Android-emulaattorilla:**
-```bash
-flutter run
-```
-
-**Omalla laitteella:**
-1. Kytke puhelin USB:llä
-2. Ota kehittäjätila käyttöön (Asetukset → Tietoja puhelimesta → Napauta "Build number" 7 kertaa)
-3. Salli USB-debugging
-4. `flutter run`
+---
 
 ## 🔧 Vianmääritys
 
-### "flutter: command not found"
-- Tarkista että Flutter on PATH:ssa
-- Käynnistä terminaali uudelleen
+**Ongelma: "Connection refused" / Backend ei vastaa**
+- Jos käytät emulaattoria, varmista että `API_URL` on `http://10.0.2.2:8000`.
+- Jos käytät fyysistä laitetta, varmista että puhelin on samassa WiFi-verkossa ja `API_URL` osoittaa tietokoneesi IP-osoitteeseen (esim. `http://192.168.1.50:8000`). Tarkista myös Windowsin palomuuri.
 
-### "No devices found"
-- Android: Käynnistä emulaattori Android Studiossa
-- iOS: Avaa Simulator (Mac)
-- Fyysinen laite: Tarkista USB-yhteys ja debugging-oikeudet
-
-### Riippuvuusvirheet
-```bash
-flutter clean
-flutter pub get
-```
-
-### Backend-yhteysongelmat
-- Tarkista että backend on käynnissä (`http://localhost:8000`)
-- Android-emulaattorilla käytä `10.0.2.2:8000`
-- iOS-simulaattorilla käytä `localhost:8000`
-
-## 📱 Rakenna APK (Android)
-
-```bash
-flutter build apk --release
-```
-
-APK löytyy: `build/app/outputs/flutter-apk/app-release.apk`
-
-Siirrä se puhelimeen ja asenna!
-
-## 🎯 Seuraavat vaiheet
-
-1. ✅ Asenna Flutter
-2. ✅ Luo projekti
-3. ✅ Kopioi tiedostot
-4. ✅ Testaa sovellus
-5. ✅ Lisää HERE API -integraatio
-6. ✅ Lisää karttaominaisuudet
-7. ✅ Lisää Digitraffic-data
-8. ✅ Testaa oikealla laitteella
-
-## 💡 Vinkit
-
-- Käytä `flutter run --hot-reload` kehityksessä
-- `r` = hot reload, `R` = hot restart
-- `q` = quit
-- Android Studio / VS Code tarjoavat paremman kehityskokemuksen
-
-## 🆘 Tuki
-
-Jos kohtaat ongelmia, tarkista:
-1. `flutter doctor` - Näyttää puuttuvat riippuvuudet
-2. `flutter clean` - Puhdistaa buildin
-3. `flutter pub get` - Päivittää riippuvuudet
-4. Backend-logit - Tarkista että API vastaa
-
-Onnea matkaan! 🚀
+**Ongelma: Kartta ei lataudu**
+- Tarkista internet-yhteys.
+- Varmista että API-avaimet (`HERE_API_KEY`, `MAPBOX_TOKEN`) ovat oikein `.env` tiedostossa.

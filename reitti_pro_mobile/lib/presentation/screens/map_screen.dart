@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:reitti_pro_mobile/data/services/api_client.dart';
@@ -37,9 +38,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _showCameras = false;
   bool _showRoadWeather = false;
   bool _showLam = false;
+  bool _showRainRadar = false; // New state
+  int? _radarTimestamp;        // New state
+  bool _showRouteWeather = true; // Default ON for new feature
+  
   List<Marker> _cameraMarkers = [];
   List<Marker> _weatherMarkers = [];
   List<Marker> _lamMarkers = [];
+  List<Marker> _routeWeatherMarkers = [];
   
   // New Layers
   bool _showTrafficMessages = false;
@@ -47,10 +53,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<Marker> _trafficMessageMarkers = [];
   List<Marker> _trafficIncidentMarkers = [];
 
+  // Warnings
+  List<String> _activeWarnings = [];
+
+
   @override
   void initState() {
     super.initState();
     _loadRoute();
+    // Delay fetch to ensure widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchLayers(); // Existing layers
+      _fetchRouteWeather(); // New Route Weather
+    });
   }
 
   void _loadRoute() {
@@ -232,6 +247,33 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     } else {
       setState(() => _lamMarkers = []);
     }
+
+    // Rain Radar Timestamp
+    if (_showRainRadar && _radarTimestamp == null) {
+      try {
+        print('🌧️ [MapScreen] Fetching RainViewer config...');
+        final config = await apiClient.getRadarConfig();
+        print('🌧️ [MapScreen] RainViewer config: $config');
+        
+        if (config.containsKey('radar') && config['radar']['past'] != null) {
+           final List<dynamic> past = config['radar']['past'];
+           if (past.isNotEmpty) {
+             final latest = past.last;
+             print('🌧️ [MapScreen] Latest radar timestamp: ${latest['time']}');
+             setState(() {
+               _radarTimestamp = latest['time'];
+             });
+           } else {
+             print('⚠️ [MapScreen] No past radar data found.');
+           }
+        } else {
+           print('⚠️ [MapScreen] Invalid radar config structure.');
+        }
+      } catch (e) {
+        print('❌ [MapScreen] Error fetching radar config: $e');
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Virhe tutkakuvan haussa: $e')));
+      }
+    }
     
     // Traffic Messages (Digitraffic)
     if (_showTrafficMessages) {
@@ -259,7 +301,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       } catch (e) {
          if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Virhe viestien haussa: $e')));
       }
-    } else {
       setState(() => _trafficMessageMarkers = []);
     }
 
@@ -268,13 +309,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       final List<dynamic> incidents = widget.routeData!['incidents'];
       
       setState(() {
-        // We reuse _trafficMessageMarkers list or create a new one? 
-        // Let's allow both Digitraffic AND HERE markers if both toggles are on.
-        // Wait, _trafficMessageMarkers is for Digitraffic. We need a list for HERE incidents.
-        // But in build method we only have _trafficMessageMarkers.
-        // Let's add _trafficIncidentMarkers to state.
-        
-        // Actually, let's just create the markers and add them to a new list _trafficIncidentMarkers
         _trafficIncidentMarkers = incidents.map((i) {
            return Marker(
               point: LatLng(i['lat'], i['lon']),
@@ -290,6 +324,218 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     } else {
        setState(() => _trafficIncidentMarkers = []);
     }
+  }
+
+  Future<void> _fetchRouteWeather() async {
+    if (!_showRouteWeather || _allRoutes.isEmpty) {
+      setState(() => _routeWeatherMarkers = []);
+      return;
+    }
+
+    try {
+      final route = _allRoutes[_selectedRouteIndex];
+      final points = route.coordinates;
+      final distKm = route.distanceKm;
+      final durationHours = route.durationHours;
+      
+      if (points.isEmpty) return;
+      
+      // Determine sample points
+      List<LatLng> samples = [];
+      List<double> progress = []; // 0.0 to 1.0
+
+      if (durationHours < 1.0) {
+        // Short trip: Only Start (0%) and End (100%)
+        samples = [points.first, points.last];
+        progress = [0.0, 1.0];
+      } else {
+        // Long trip: Start, 25%, 50%, 75%, End
+        samples = [points.first];
+        progress = [0.0];
+        
+        // Simple sampling by index (assuming roughly uniform distribution of points)
+        // A better way would be by distance, but index is fast approximation for now.
+        final int len = points.length;
+        if (len > 4) {
+          samples.add(points[(len * 0.25).round()]);
+          progress.add(0.25);
+          samples.add(points[(len * 0.50).round()]);
+          progress.add(0.50);
+          samples.add(points[(len * 0.75).round()]);
+          progress.add(0.75);
+        }
+        
+        samples.add(points.last);
+        progress.add(1.0);
+      }
+      
+      // Calculate times and build request
+      final startTimeStr = widget.routeData?['departureTime'] ?? DateTime.now().toIso8601String();
+      final startTime = DateTime.tryParse(startTimeStr) ?? DateTime.now();
+      
+      List<Map<String, dynamic>> requests = [];
+      for (int i = 0; i < samples.length; i++) {
+        final double p = progress[i];
+        
+        // Calculate estimated time at this point
+        // T = Start + (Duration * Progress)
+        final timeOffsetSeconds = (durationHours * 3600 * p).round();
+        final pointTime = startTime.add(Duration(seconds: timeOffsetSeconds));
+        
+        requests.add({
+          'lat': samples[i].latitude,
+          'lon': samples[i].longitude,
+          'time': pointTime.toIso8601String(),
+        });
+      }
+      
+      // Fetch batch weather
+      final apiClient = ref.read(apiClientProvider);
+      final results = await apiClient.getBatchWeather(requests);
+      
+      // Create Markers
+      List<Marker> newMarkers = [];
+      List<String> currentWarnings = [];
+
+      for (var result in results) {
+        final data = result['data'];
+        final lat = result['coordinates']['lat'];
+        final lon = result['coordinates']['lon'];
+        
+        if (data != null && data['weather'] != 'virhe') {
+           newMarkers.add(Marker(
+             point: LatLng(lat, lon),
+             width: 60, // Wide for icon + text
+             height: 60,
+             child: GestureDetector(
+               onTap: () => _showRouteWeatherDialog(data, result['time']),
+               child: Column(
+                 mainAxisSize: MainAxisSize.min,
+                 children: [
+                   Container(
+                     padding: const EdgeInsets.all(4),
+                     decoration: BoxDecoration(
+                       color: Colors.white.withOpacity(0.9),
+                       borderRadius: BorderRadius.circular(8),
+                       boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26)],
+                     ),
+                     child: Column(
+                       children: [
+                         // Weather Icon (approximation based on description/precip)
+                         Icon(
+                           _getWeatherIcon(data['precipitation'] ?? 0, data['temperature'] ?? 0),
+                           size: 20,
+                           color: Colors.blueGrey,
+                         ),
+                         Text(
+                           "${data['temperature']}°",
+                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                         )
+                       ],
+                     ),
+                   ),
+                   // Triangle pointer (optional simple styling)
+                   // Icon(Icons.arrow_drop_down, size: 16, color: Colors.white),
+                 ],
+               ),
+             ),
+           ));
+         
+           // Check for Warnings
+           // 1. Heavy Rain
+           if ((data['precipitation'] ?? 0) > 2.0 && !currentWarnings.contains('rankkasade')) {
+             currentWarnings.add('rankkasade');
+           }
+           // 2. Slippery/Ice (Temp < 1 and precipitating)
+           if ((data['temperature'] ?? 0) < 1 && (data['precipitation'] ?? 0) > 0 && !currentWarnings.contains('liukas')) {
+             currentWarnings.add('liukas');
+           }
+           // 3. High Wind
+           if ((data['wind_speed'] ?? 0) > 15 && !currentWarnings.contains('tuuli')) {
+             currentWarnings.add('tuuli');
+           }
+        }
+      }
+      
+      setState(() {
+        _routeWeatherMarkers = newMarkers;
+        _activeWarnings = currentWarnings;
+      });
+    } catch (e) {
+      print('Failed to calculate route weather: $e');
+    }
+  }
+
+  IconData _getWeatherIcon(num precipitation, num temperature) {
+    if (precipitation > 0.5) return Icons.umbrella; // Rain
+    if (precipitation > 0.1) return Icons.grain;    // Drizzle
+    if (temperature > 20) return Icons.wb_sunny;    // Sunny/Hot
+    if (temperature > 5) return Icons.cloud;        // Cloudy
+    return Icons.ac_unit;                           // Cold/Snow
+  }
+
+  void _showRouteWeatherDialog(Map<String, dynamic> data, String? timeIso) {
+    String timeStr = "Arvioitu aika";
+    if (timeIso != null) {
+      try {
+        final dt = DateTime.parse(timeIso);
+        // Add 2 hours for basic timezone fix if needed, or rely on local
+        // Here we just format cleanly
+        timeStr = "${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}";
+      } catch (e) {
+        // keep default
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+               _getWeatherIcon(data['precipitation'] ?? 0, data['temperature'] ?? 0),
+               color: Colors.blue,
+            ),
+            const SizedBox(width: 8),
+            const Text("Sää reitillä"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+             Text("📍 Arvioitu aika: $timeStr", style: const TextStyle(fontWeight: FontWeight.bold)),
+             const SizedBox(height: 8),
+             Text("🌡️ Lämpötila: ${data['temperature']} °C"),
+             Text("🌧️ Sademäärä: ${data['precipitation']} mm"),
+             Text("💨 Tuuli: ${data['wind_speed'] ?? '-'} m/s"),
+             Text("📝 Kuvaus: ${data['weather']}"),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Sulje'))],
+      ),
+    );
+  }
+
+
+
+  void _showWarningLegend() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(children: [Icon(Icons.info_outline, color: Colors.blue), SizedBox(width: 8), Text("Varoitusten selite")]),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(leading: Icon(Icons.umbrella, color: Colors.blue), title: Text("Rankkasade"), subtitle: Text("> 2.0 mm/h")),
+            ListTile(leading: Icon(Icons.ac_unit, color: Colors.cyan), title: Text("Liukas keli"), subtitle: Text("Lämpötila < 1°C ja sadetta")),
+            ListTile(leading: Icon(Icons.air, color: Colors.grey), title: Text("Kova tuuli"), subtitle: Text("> 15 m/s")),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Sulje'))],
+      ),
+    );
   }
 
   void _showCameraDialog(Map<String, dynamic> camera) {
@@ -519,6 +765,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     _fetchLayers();
                   },
                 ),
+                SwitchListTile(
+                  title: const Text("Saderintama (RainViewer)"),
+                  value: _showRainRadar,
+                  onChanged: (val) {
+                    setModalState(() => _showRainRadar = val);
+                    setState(() => _showRainRadar = val);
+                    _fetchLayers();
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text("Matkan sää (Ikonit)"),
+                  secondary: const Icon(Icons.wb_sunny),
+                  value: _showRouteWeather,
+                  onChanged: (val) {
+                    setModalState(() => _showRouteWeather = val);
+                    setState(() => _showRouteWeather = val);
+                    _fetchRouteWeather();
+                  },
+                ),
                 const Divider(),
                 const Text("Liikenne", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 SwitchListTile(
@@ -570,6 +835,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         title: const Text('🐧 Pingut - Kartta'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'Merkkien selite',
+            onPressed: _showWarningLegend,
+          ),
+          IconButton(
             icon: const Icon(Icons.layers),
             onPressed: _showLayerMenu,
           ),
@@ -590,6 +860,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.example.reitti_pro_mobile',
               ),
+                if (_showRainRadar && _radarTimestamp != null)
+                Opacity(
+                  opacity: 0.7,
+                  child: TileLayer(
+                    urlTemplate: 'https://tilecache.rainviewer.com/v2/radar/$_radarTimestamp/256/{z}/{x}/{y}/2/1_1.png',
+                    userAgentPackageName: 'com.example.reitti_pro_mobile',
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
               if (_showTrafficIncidents)
                  TileLayer(
                    urlTemplate: ref.read(apiClientProvider).getTrafficTileUrlTemplate(),
@@ -624,6 +903,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ..._lamMarkers,
                 ..._trafficMessageMarkers,
                 ..._trafficIncidentMarkers,
+                ..._routeWeatherMarkers,
               ]),
             ],
           ),
@@ -713,6 +993,54 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
 
+          // Warnings Pill (Floating above card)
+          if (_activeWarnings.isNotEmpty && hasRoute)
+            Positioned(
+              left: 16,
+              bottom: 220, 
+              child: GestureDetector(
+                onTap: () {
+                   showDialog(
+                     context: context,
+                     builder: (ctx) => AlertDialog(
+                       title: const Text("⚠️ Reittivaroitukset"),
+                       content: Column(
+                         mainAxisSize: MainAxisSize.min,
+                         crossAxisAlignment: CrossAxisAlignment.start,
+                         children: _activeWarnings.map((w) {
+                           String text = w;
+                           IconData icon = Icons.warning;
+                           if (w == 'rankkasade') { text = "Rankkasadetta (>2mm/h)"; icon = Icons.umbrella; }
+                           if (w == 'liukas') { text = "Liukasta (sade + pakkanen)"; icon = Icons.ac_unit; }
+                           if (w == 'tuuli') { text = "Kovaa tuulta (>15m/s)"; icon = Icons.air; }
+                           return ListTile(leading: Icon(icon, color: Colors.orange), title: Text(text));
+                         }).toList(),
+                       ),
+                       actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("OK"))],
+                     )
+                   );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [BoxShadow(blurRadius: 4, color: Colors.black26)],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.white),
+                      const SizedBox(width: 8),
+                      Text(
+                        "${_activeWarnings.length} Varoitusta",
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           // Route Info Card Overlay
           if (hasRoute)
             Positioned(
@@ -727,6 +1055,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   departureTime: depTime,
                   onAnalyzePressed: _analyzeRoute,
                   onSharePressed: _shareRoute,
+                  onDetailsPressed: () {
+                    if (widget.routeData != null) {
+                      context.pushNamed('route-details', extra: widget.routeData);
+                    }
+                  },
                 ),
               ),
             ),

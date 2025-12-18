@@ -1,9 +1,68 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../data/services/api_client.dart';
 
-class RouteDetailsScreen extends StatelessWidget {
+class RouteDetailsScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> routeData;
 
   const RouteDetailsScreen({super.key, required this.routeData});
+
+  @override
+  ConsumerState<RouteDetailsScreen> createState() => _RouteDetailsScreenState();
+}
+
+class _RouteDetailsScreenState extends ConsumerState<RouteDetailsScreen> {
+  bool _isLoadingWeather = true;
+  Map<String, dynamic>? _weatherData;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchWeather();
+  }
+
+  Future<void> _fetchWeather() async {
+    try {
+      print('❄️ [RouteDetailsScreen] Fetching weather...');
+      print('📦 [RouteDetailsScreen] Route Data: ${widget.routeData}');
+      
+      final coordinates = widget.routeData['coordinates'] as List;
+      if (coordinates.isEmpty) {
+        print('❌ [RouteDetailsScreen] No coordinates found!');
+        return;
+      }
+
+      final fromPoint = coordinates.first;
+      final toPoint = coordinates.last;
+      
+      // Use injected departureTime or default to now
+      final String departureTime = widget.routeData['departureTime'] ?? DateTime.now().toIso8601String();
+      print('🕒 [RouteDetailsScreen] Departure Time: $departureTime');
+
+      final client = ref.read(apiClientProvider);
+      final weather = await client.getRouteWeather(
+        fromLat: fromPoint[0],
+        fromLon: fromPoint[1],
+        toLat: toPoint[0],
+        toLon: toPoint[1],
+        departureTime: departureTime,
+      );
+
+      print('✅ [RouteDetailsScreen] Weather fetched: $weather');
+
+      if (mounted) {
+        setState(() {
+          _weatherData = weather;
+          _isLoadingWeather = false;
+        });
+      }
+    } catch (e) {
+      print('❌ [RouteDetailsScreen] Error fetching weather: $e');
+      if (mounted) {
+        setState(() => _isLoadingWeather = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,22 +93,22 @@ class RouteDetailsScreen extends StatelessWidget {
                     _buildInfoRow(
                       Icons.straighten,
                       'Matka',
-                      '${routeData['distance'] ?? 'N/A'} km',
+                      '${widget.routeData['distance_km']?.toStringAsFixed(1) ?? widget.routeData['distance'] ?? 'N/A'} km',
                     ),
                     _buildInfoRow(
                       Icons.access_time,
                       'Ajoaika',
-                      '${routeData['duration'] ?? 'N/A'} min',
+                      '${widget.routeData['duration_hours']?.toStringAsFixed(1) ?? widget.routeData['duration'] ?? 'N/A'} h',
                     ),
                     _buildInfoRow(
                       Icons.schedule,
                       'Lähtö',
-                      routeData['departure'] ?? 'N/A',
+                      widget.routeData['departure'] ?? 'N/A',
                     ),
                     _buildInfoRow(
                       Icons.flag,
                       'Perillä',
-                      routeData['arrival'] ?? 'N/A',
+                      widget.routeData['arrival'] ?? 'N/A',
                     ),
                   ],
                 ),
@@ -72,7 +131,35 @@ class RouteDetailsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text('Ladataan säätietoja...'),
+                    if (_isLoadingWeather)
+                       const Padding(
+                         padding: EdgeInsets.all(8.0),
+                         child: Center(child: CircularProgressIndicator()),
+                       )
+                    else if (_weatherData == null || _weatherData!.isEmpty)
+                      const Text('Säätietoja ei saatavilla')
+                    else
+                      Column(
+                        children: [
+                          _buildWeatherRow(
+                            'Lähtö', 
+                            _weatherData!['departure']['city'] ?? 'Lähtöpiste',
+                            _weatherData!['departure']['current']
+                          ),
+                          const Divider(),
+                          _buildWeatherRow(
+                            'Perillä', 
+                            _weatherData!['arrival']['city'] ?? 'Määränpää',
+                            _weatherData!['arrival']['current'] // Note: Ideally should pick from forecast based on arrival time
+                          ),
+                          const SizedBox(height: 8),
+                          if (_weatherData!['departure']['forecast'] != null)
+                             Text(
+                               'Ennuste tarkempiin aikoihin viittaa API-vastaukseen.', 
+                               style: TextStyle(fontSize: 12, color: Colors.grey[600])
+                             ),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -114,6 +201,49 @@ class RouteDetailsScreen extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWeatherRow(String label, String location, Map<String, dynamic>? data) {
+    if (data == null) return const SizedBox.shrink();
+    
+    final temp = data['temperature'];
+    final desc = data['weather'];
+    // Simple mapping for icon based on description or data
+    // For now just use cloud
+    IconData icon = Icons.cloud;
+    if (desc.toString().contains('aurinko')) icon = Icons.wb_sunny;
+    if (desc.toString().contains('sade')) icon = Icons.umbrella;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                Text(location, style: const TextStyle(fontSize: 16)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text('$temp°C', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              Text(desc.toString(), style: const TextStyle(fontSize: 14)),
+            ],
+          ),
+        ],
       ),
     );
   }

@@ -16,7 +16,17 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Weather API", version="1.0.0")
 
-OPEN_METEO_BACKEND = "http://meteo-backend:8081"
+# Determine backend URL dynamically
+import socket
+import os
+
+try:
+    socket.gethostbyname("meteo-backend")
+    default_backend = "http://meteo-backend:8081"
+except socket.gaierror:
+    default_backend = "http://localhost:8081"
+
+OPEN_METEO_BACKEND = os.getenv("OPEN_METEO_BACKEND", default_backend)
 
 CITIES = {
     "Helsinki": (60.1699, 24.9384),
@@ -64,7 +74,7 @@ def _get_weather_description(temperature: float, precipitation: float) -> str:
         return "selkeää"
 
 
-def _fetch_point_weather(lat: float, lon: float, hours: int = 6) -> Optional[Dict]:
+def _fetch_point_weather(lat: float, lon: float, hours: int = 6, start_time: Optional[str] = None) -> Optional[Dict]:
     """Fetch weather data for a specific point from Open-Meteo backend.
     
     Parameters
@@ -75,6 +85,9 @@ def _fetch_point_weather(lat: float, lon: float, hours: int = 6) -> Optional[Dic
         Longitude coordinate.
     hours : int
         Number of forecast hours.
+    start_time : Optional[str]
+        Start time in ISO format (e.g. 2023-10-27T10:00:00).
+        If None, uses current UTC time.
     
     Returns
     -------
@@ -82,12 +95,15 @@ def _fetch_point_weather(lat: float, lon: float, hours: int = 6) -> Optional[Dic
         Weather data or None if failed.
     """
     try:
+        # Use provided start_time or fallback to current UTC time
+        query_start_time = start_time if start_time else datetime.utcnow().isoformat()
+        
         response = requests.get(
             f"{OPEN_METEO_BACKEND}/api/forecast/point",
             params={
                 "lat": lat,
                 "lon": lon,
-                "start_time": datetime.utcnow().isoformat(),
+                "start_time": query_start_time,
                 "hours": hours
             },
             timeout=30
@@ -137,6 +153,7 @@ def _simplify_forecast(raw_data: Dict) -> List[Dict]:
             "time": time_display,
             "temperature": round(temp),
             "precipitation": round(precip, 1),
+            "wind_speed": round(point.get("windspeed_10m", 0), 1),
             "weather": _get_weather_description(temp, precip)
         })
     
@@ -377,7 +394,8 @@ async def get_route_weather_coords(
     from_lon: float = Query(..., ge=-180, le=180, description="Departure longitude"),
     to_lat: float = Query(..., ge=-90, le=90, description="Arrival latitude"),
     to_lon: float = Query(..., ge=-180, le=180, description="Arrival longitude"),
-    hours: int = Query(6, ge=1, le=6, description="Forecast hours (1-6)")
+    hours: int = Query(6, ge=1, le=6, description="Forecast hours (1-6)"),
+    start_time: Optional[str] = Query(None, description="Departure time in ISO format (e.g. 2023-10-27T10:00:00). If missing, uses 'now'.")
 ):
     """Get weather forecast for route using coordinates.
     
@@ -399,6 +417,8 @@ async def get_route_weather_coords(
         Arrival longitude.
     hours : int
         Number of forecast hours (1-6).
+    start_time : str, optional
+        Departure time in ISO format.
     
     Returns
     -------
@@ -411,8 +431,16 @@ async def get_route_weather_coords(
         If backend fails to fetch data.
     """
     # Fetch weather for both points
-    from_data = _fetch_point_weather(from_lat, from_lon, hours)
-    to_data = _fetch_point_weather(to_lat, to_lon, hours)
+    # For departure: use start_time directly
+    from_data = _fetch_point_weather(from_lat, from_lon, hours, start_time)
+    
+    # For arrival: ideally we'd add travel_duration to start_time, 
+    # but for now we fetch the same time window and let frontend pick the right slot,
+    # OR we could just pass the same start_time if the API returns enough hourly context.
+    # Since we set hours=6, we have a 6h window from start_time.
+    # If the trip is longer than 6 hours, we might miss the arrival weather with this simple logic.
+    # But for this iteration, let's stick to fetching the window starting at start_time.
+    to_data = _fetch_point_weather(to_lat, to_lon, hours, start_time)
     
     if not from_data or not to_data:
         raise HTTPException(
@@ -455,6 +483,7 @@ async def list_cities():
     Returns
     -------
     dict
+    
         Dictionary of city names and their coordinates.
     """
     return {
@@ -467,3 +496,76 @@ async def list_cities():
         ]
     }
 
+
+@app.get("/radar/config")
+async def get_radar_config():
+    """Get RainViewer radar configuration (timestamps).
+    
+    Returns
+    -------
+    dict
+        Latest radar timestamps and configuration.
+    """
+    try:
+        # Fetch configuration from RainViewer
+        response = requests.get("https://api.rainviewer.com/public/weather-maps.json", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch radar config: {e}")
+        raise HTTPException(
+            status_code=503, 
+            detail="Failed to fetch radar configuration"
+        )
+
+
+from pydantic import BaseModel
+
+class WeatherPointRequest(BaseModel):
+    lat: float
+    lon: float
+    time: str  # ISO format
+
+@app.post("/batch")
+async def get_batch_weather(points: List[WeatherPointRequest]):
+    """Get weather forecast for a batch of points at specific times.
+    
+    Parameters
+    ----------
+    points : List[WeatherPointRequest]
+        List of objects containing lat, lon, and time.
+    
+    Returns
+    -------
+    List[dict]
+        List of weather data for each point.
+    """
+    results = []
+    
+    for point in points:
+        try:
+            # We want the weather AT that specific time.
+            # _fetch_point_weather fetches a window starting at start_time.
+            # We will fetch 1 hour of data at that specific time.
+            raw_data = _fetch_point_weather(point.lat, point.lon, hours=1, start_time=point.time)
+            
+            if raw_data:
+                forecast = _simplify_forecast(raw_data)
+                weather_data = forecast[0] if forecast else {"temperature": 0, "precipitation": 0, "weather": "ei tietoa"}
+            else:
+                weather_data = {"temperature": 0, "precipitation": 0, "weather": "virhe"}
+                
+            results.append({
+                "coordinates": {"lat": point.lat, "lon": point.lon},
+                "time": point.time,
+                "data": weather_data
+            })
+        except Exception as e:
+            logger.error(f"Batch fetch error for {point}: {e}")
+            results.append({
+                "coordinates": {"lat": point.lat, "lon": point.lon},
+                "time": point.time,
+                "data": {"temperature": 0, "precipitation": 0, "weather": "virhe"}
+            })
+            
+    return results

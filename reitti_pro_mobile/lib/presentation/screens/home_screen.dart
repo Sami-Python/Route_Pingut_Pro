@@ -161,6 +161,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ? "Oma sijainti" 
           : _originController.text;
       routeData['destination'] = _destController.text;
+      
+      // Inject selected time for weather fetching
+      if (depTime != null) {
+        routeData['departureTime'] = depTime;
+      } else {
+        // If "Departure Now", use current time
+        routeData['departureTime'] = DateTime.now().toIso8601String();
+      }
 
       if (mounted) {
         context.pushNamed(
