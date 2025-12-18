@@ -316,15 +316,42 @@ with st.expander("Graph API Demo", expanded=False):
                     st.json(response.json())
             except Exception as e:
                 st.error(f"Connection error: {e}")
+                
+    if st.button("Get My Calendars", key="get_graph_calendars"):
+        if not token:
+            st.warning("Please enter a token first.")
+        else:
+            try:
+                response = requests.get(f"{API_BASE_URL}/graph/calendars", params={"token": token})
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    st.success("Successfully fetched calendars!")
+                    with st.expander("Raw Data"):
+                        st.json(data)
+                else:
+                    st.error(f"Error: {response.status_code}")
+                    st.json(response.json())
+            except Exception as e:
+                st.error(f"Connection error: {e}")
 
 with st.expander("Google Calendar demo", expanded=False):
     st.subheader("Google Calendar")
     
-    login_url = "http://localhost:8000/gcal/login"
+    # Check for token in query params
+    if "gcal_access_token" in st.query_params:
+        token = st.query_params["gcal_access_token"]
+        st.session_state["gcal_access_token"] = token
+        # Clear the token from URL to clean it up
+        st.query_params.clear()
+        st.rerun()
+
+    login_url = "http://localhost:8000/gcal/login?redirect_url=http://localhost:8501/cal_demo"
     st.markdown(f"👉 **[Click here to Login]({login_url})**", unsafe_allow_html=True)
     st.caption("After logging in, the token will be automatically populated below.")
     
-    default_token = st.session_state.get("access_token", "")
+    # Use session state token if available, otherwise default blank
+    default_token = st.session_state.get("gcal_access_token", st.session_state.get("access_token", ""))
     token = st.text_input("Access Token", value=default_token, type="password", key="gcal_token_input")
     
     if st.button("Get My Calendar Events", key="get_gcal_events"):

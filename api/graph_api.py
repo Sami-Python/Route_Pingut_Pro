@@ -102,8 +102,33 @@ async def callback(request: Request, code: str):
     
     return RedirectResponse(url=redirect_url)
 
+
+@app.get("/calendars")
+async def get_calendars(token: str):
+    """
+    Get user's calendars from Outlook
+    """
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    
+    graph_url = "https://graph.microsoft.com/v1.0/me/calendars"
+    
+    response = requests.get(graph_url, headers=headers)
+    
+    if response.status_code != 200:
+        return {"error": "Failed to fetch calendars", "status": response.status_code, "details": response.json()}
+    
+    return response.json()
+
+
+
 @app.get("/events")
-async def get_events(token: str):
+async def get_events(token: str, calendar_id: Optional[str] = None):
     """
     Get events from an Outlook calendar
     Returns a list of events as a list of dictionaries. 
@@ -117,9 +142,12 @@ async def get_events(token: str):
         "Content-Type": "application/json"
     }
     
-    # Fetch events from the default calendar
-    # https://graph.microsoft.com/v1.0/me/events
-    graph_url = "https://graph.microsoft.com/v1.0/me/events"
+    # Fetch events from the default calendar or specific calendar
+    if calendar_id:
+        graph_url = f"https://graph.microsoft.com/v1.0/me/calendars/{calendar_id}/events"
+    else:
+        # https://graph.microsoft.com/v1.0/me/events
+        graph_url = "https://graph.microsoft.com/v1.0/me/events"
     
     # You can add query parameters like $select, $top, etc.
     params = {
@@ -132,7 +160,11 @@ async def get_events(token: str):
     if response.status_code != 200:
         return {"error": "Failed to fetch events", "status": response.status_code, "details": response.json()}
     
+<<<<<<< HEAD
     return cal_utils.get_events_from_outlook(response.json())
+=======
+    return utils.cal_utils.get_events_from_outlook(response.json())
+>>>>>>> 2ac424f011da62b5d6990ac92ac08cca9b79f65f
     #return response.json()
 
 if __name__ == "__main__":

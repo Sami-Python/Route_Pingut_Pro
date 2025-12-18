@@ -1,3 +1,0 @@
-# Yhteenveto
-
-Sisältö tulossa.

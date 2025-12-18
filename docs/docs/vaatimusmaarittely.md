@@ -1,8 +1,8 @@
 # Vaatimusmäärittely
 
-## 7 Vaatimusmäärittely
+Vaatimusmäärittely kuvaa Tiellä liikkujan mikropalvelun toiminnalliset ja ei-toiminnalliset vaatimukset MVP-versiota varten. Määrittelyn tarkoituksena on kuvata, mitä järjestelmä tekee, ketkä sitä käyttävät sekä millä teknisillä ja laadullisilla reunaehdoilla palvelu toteutetaan. Vaatimusmäärittely toimii perustana järjestelmän suunnittelulle, toteutukselle ja testaukselle.
 
-### 7.1 Käyttötapaukset ja käyttäjätarinat
+Määrittely keskittyy web-pohjaiseen MVP-toteutukseen, joka hyödyntää ulkoisia liikenne-, sää- ja karttarajapintoja. Osa vaatimuksista ja käyttötapauksista on määritelty jatkokehitystä silmällä pitäen, mutta MVP-versiossa ei toteuteta pysyvää tietovarastoa eikä käyttäjäkohtaisia profiileja.
 
 **Järjestelmän nimi:** Matkahälytysportaali / App
 
@@ -12,15 +12,15 @@
 
 **Sidosryhmät:** Loppukäyttäjät, palvelun ylläpitäjät, kalenteripalvelun tarjoajat, sää- ja liikennedatatoimittajat
 
-### 2. Oletukset ja rajaukset
+## Oletukset ja rajaukset
 
 - Käyttäjällä on toimiva internet-yhteys ja sijaintilupa.
 - Käyttäjä voi sallia kalenterin käytön reittien automaattiseen luontiin.
 - MVP-versiossa tuetaan vain autoilureittejä (ei julkista liikennettä).
 
-### 3. Tekijät
+## Toimijat
 
-| Tekijä | Tyyppi | Kuvaus |
+| Toimija | Tyyppi | Kuvaus |
 |--------|--------|--------|
 | Käyttäjä | Pääosallinen | Asettaa matkan ja vastaanottaa hälytykset |
 | Kalenteripalvelu | Toissijainen | Tarjoaa lähtö- ja määränpäätiedot |
@@ -29,7 +29,7 @@
 | Sää/Kelitieto-API | Toissijainen | Tuo keliolosuhteet ja näkyvyystiedot |
 | Joukkoliikenne-API | Valinnainen | Antaa julkisen liikenteen poikkeamatiedot |
 
-### 4. Tietolähteet ja luvat
+## Tietolähteet ja luvat
 
 | Tietolähde | Käyttötarkoitus | API-saatavuus |
 |------------|-----------------|---------------|
@@ -37,7 +37,7 @@
 | Ilmatieteen laitos (FMI) | Sääennusteet ja tiesää | Avoin API |
 | Digitransit / HSL | Joukkoliikennepoikkeamat | Avoin API |
 
-### 5. Käyttötapaukset
+## Käyttötapaukset
 
 | Tunnus | Nimi | Kuvaus |
 |--------|------|--------|
@@ -50,7 +50,7 @@
 | UC07 | Hallinnoi lupia & tietolähteitä | Käyttäjä voi hyväksyä tai perua sijainti- ja kalenteriluvat |
 | UC08 | Tallenna palaute & paranna mallia | Käyttäjä antaa palautetta hälytysten hyödyllisyydestä |
 
-### 6. Yksityiskohtaiset käyttötapaukset
+## Yksityiskohtaiset käyttötapaukset
 
 #### UC01 – Aseta tuleva matka
 
@@ -74,7 +74,7 @@
 | **Vaihtoehdot / poikkeukset** | Hälytykset hiljaisessa tilassa → näytetään vain ilmoitus |
 | **Jälkiehdot** | Käyttäjä saa ajantasaisen reittitilanteen |
 
-#### UC03 – Laske reitti & kerää varoitukset
+### UC03 – Laske reitti & kerää varoitukset
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -85,7 +85,7 @@
 | **Vaihtoehdot / poikkeukset** | API ei vastaa → käytetään välimuistia |
 | **Jälkiehdot** | Reittitiedot ja varoitukset valmiit UC04:lle |
 
-#### UC04 – Näytä hälytykset & suositukset
+### UC04 – Näytä hälytykset & suositukset
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -95,7 +95,7 @@
 | **Peruspolku** | 1. Näytetään reitin tiiviste ja varoitukset<br>2. Näytetään arvioitu viive ja suositukset (UC05) |
 | **Jälkiehdot** | Käyttäjä voi reagoida suositukseen tai ohittaa sen |
 
-#### UC05 – Rerouttaa tai säädä lähtöaikaa
+### UC05 – Rerouttaa tai säädä lähtöaikaa
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -104,7 +104,7 @@
 | **Peruspolku** | 1. Järjestelmä laskee vaihtoehdot<br>2. Käyttäjä valitsee uuden reitin tai lähtöajan<br>3. Päivitetään UC01 ja UC02 |
 | **Jälkiehdot** | Reitti ja muistutus päivitetty |
 
-#### UC06 – Aseta ilmoitusten taso & kanavat
+### UC06 – Aseta ilmoitusten taso & kanavat
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -113,7 +113,7 @@
 | **Peruspolku** | 1. Käyttäjä valitsee ilmoituskanavat ja kriittisyyskynnyksen<br>2. Asetukset tallennetaan |
 | **Jälkiehdot** | Ilmoitukset toimivat asetusten mukaisesti |
 
-#### UC07 – Hallinnoi lupia & tietolähteitä
+### UC07 – Hallinnoi lupia & tietolähteitä
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -122,7 +122,7 @@
 | **Peruspolku** | 1. Käyttäjä tarkastelee käytössä olevia lupia<br>2. Käyttäjä sallii tai poistaa luvat<br>3. Järjestelmä tallentaa muutokset |
 | **Jälkiehdot** | Lupatiedot päivitetty |
 
-#### UC08 – Tallenna palaute & paranna mallia
+### UC08 – Tallenna palaute & paranna mallia
 
 | Osa | Kuvaus |
 |-----|--------|
@@ -131,14 +131,14 @@
 | **Peruspolku** | 1. Käyttäjä arvioi varoituksen (hyödyllinen / ei hyödyllinen)<br>2. Palaute tallennetaan analytiikkaan |
 | **Jälkiehdot** | Mallin kehitysdata tallentunut |
 
-### 7.2 Käyttötapauskaavio
+## Käyttötapauskaavio
 
 ![Käyttötapauskaavio](../img/käyttotapauskaavio.png)
 
 
-### 7.3 Käyttäjä- ja Järjestelmävaatimukset
+## Käyttäjä- ja Järjestelmävaatimukset
 
-#### 7.3.1 Käyttäjävaatimukset (luonnos)
+### Käyttäjävaatimukset
 
 Nämä käyttäjävaatimukset ovat toiminnallisia.
 
@@ -150,7 +150,7 @@ Nämä käyttäjävaatimukset ovat toiminnallisia.
 | U-004 | 11.11.25 | Liikennetietojen näkeminen | Käyttäjä näkee reitin varrella olevat merkittävät liikenne-esteet, kuten tietyöt, onnettomuudet ja kelikameroiden kuvakkeet. | Korkea | Palvelun ydinlupaus (olosuhteiden arviointi). | Luonnos | Kartalla näkyy ikoneita tietyö- ja kamerakohteissa. |
 | U-005 | 11.11.25 | Responsiivinen käyttöliittymä | Käyttäjä voi käyttää sovellusta yleisimmillä web-selaimilla (esim. Chrome, Firefox) tietokoneella ja mobiililaitteella. | Keskitaso | MVP:n peruskäytettävyys. | Luonnos | Web-sovellus skaalautuu mobiililaitteen näytölle. |
 
-#### 7.3.2 Järjestelmävaatimukset (luonnos)
+### Järjestelmävaatimukset
 
 Nämä järjestelmävaatimukset ovat toiminnallisia teknisiä toteutuksia, jotka mahdollistavat käyttäjävaatimusten täyttymisen. Nämä keskittyvät Python/REST API -mikropalveluun.
 
@@ -167,9 +167,9 @@ Nämä järjestelmävaatimukset ovat toiminnallisia teknisiä toteutuksia, jotka
 | S-009 | 11.11.25 | Versionhallinta | Koodi on GitLab-repositoriossa ja noudattaa sovittuja branch- ja commit-käytäntöjä. | Korkea | Projektin tavoite | Luonnos | Koodi on GitLabissa ja merge requesteja käytetään. |
 | S-010 | 11.11.25 | Staattinen koodianalyysi | Koodille ajetaan staattinen koodianalyysi laadun varmistamiseksi. | Keskitaso | Projektin tavoite | Luonnos | CI-putki sisältää lint-vaiheen (esim. Flake8, Black). |
 
-### 7.4 Ei-toiminnalliset vaatimukset (Asiakasvaatimukset)
+## Ei-toiminnalliset vaatimukset (Asiakasvaatimukset)
 
-#### 7.4.1 Käyttäjät ja Roolit
+### Käyttäjät ja Roolit
 
 Nämä vaatimukset määrittelevät, ketkä järjestelmää käyttävät ja mitä se heiltä edellyttää. Alustavasti jokaisesta on 3 vaatimusta.
 
@@ -179,7 +179,7 @@ Nämä vaatimukset määrittelevät, ketkä järjestelmää käyttävät ja mit�
 | NFR-002 | 11.11.25 | Anonyymi käyttö | MVP-version tulee toimia täysin ilman käyttäjätunnistusta tai kirjautumista. Järjestelmä ei saa edellyttää käyttäjätilin luomista. | Korkea | Rajaus. | Luonnos | Kaikki U-vaatimukset (U-001 - U-005) ovat käytettävissä ilman kirjautumista. |
 | NFR-003 | 11.11.25 | Ylläpitäjän rooli | Ylläpitäjä on kehitystiimi. Tiimin tulee pystyä seuraamaan palvelun perustilaa ja ajamaan testejä. | Korkea | Projektin vaatimus. | Luonnos | Kehitystiimillä on pääsy GitLab-projektiin, logeihin ja CI/CD-putkiin. |
 
-#### 7.4.2 Luotettavuus ja Ylläpidettävyys (Availability)
+### Luotettavuus ja Ylläpidettävyys (Availability)
 
 Nämä vaatimukset määrittelevät, kuinka vikasietoinen ja käytettävä palvelun tulee olla.
 
@@ -189,7 +189,7 @@ Nämä vaatimukset määrittelevät, kuinka vikasietoinen ja käytettävä palve
 | NFR-005 | 11.11.25 | Vikatilanteiden graceful-käsittely | Jos jokin ulkoinen rajapinta (FMI, Fintraffic) ei vastaa tai kaatuu, mikropalvelu ei saa kaatua. Sen tulee palauttaa virhe hallitusti. | Korkea | Järjestelmän vakaus. | Luonnos | Jos FMI-rajapinta on alhaalla, API-kutsu palauttaa HTTP 503 (Service Unavailable) tai 200 (osittaisella datalla ja virheviestillä) eikä HTTP 500. |
 | NFR-006 | 11.11.25 | Ylläpitotoimet | Kehitystiimin tulee pystyä päivittämään palvelu uuteen versioon keskitetysti GitLab CI/CD -putken kautta. | Korkea | Projektin vaatimus. | Luonnos | git push päähaaraan käynnistää automaattisen build-, test- ja deploy-putken. |
 
-#### 7.4.3 Suorituskyky (Performance)
+### Suorituskyky (Performance)
 
 Nämä vaatimukset määrittelevät, kuinka nopeasti järjestelmän tulee vastata käyttäjän toimiin.
 
@@ -198,7 +198,7 @@ Nämä vaatimukset määrittelevät, kuinka nopeasti järjestelmän tulee vastat
 | NFR-007 | 11.11.25 | API-vastausaika | Mikropalvelun tulee aggregoida tiedot (FMI, Fintraffic, Maps) ja palauttaa vastaus Streamlit-käyttöliittymälle kohtuullisessa ajassa. | Keskitaso | Käyttäjäkokemus. | Luonnos | 95% (p95) API-kutsuista (esim. /route-conditions) suoriutuu alle 5 sekunnissa normaaliolosuhteissa. |
 | NFR-008 | 11.11.25 | Käyttöliittymän latausaika | Streamlit-web-sovelluksen ensimmäisen latauksen (initial load) tulee olla nopea, jotta käyttäjä ei poistu sivulta. | Keskitaso | Käyttäjäkokemus. | Luonnos | Sivu latautuu interaktiiviseksi (Time to Interactive) alle 3 sekunnissa tavallisella internetyhteydellä. |
 
-#### 7.4.4 Data ja Logiikka
+### Data ja Logiikka
 
 Nämä vaatimukset määrittelevät datan käsittelyn ja "tekoälyn" eli tässä tapauksessa datan aggregointilogiikan vaatimukset.
 
@@ -208,7 +208,7 @@ Nämä vaatimukset määrittelevät datan käsittelyn ja "tekoälyn" eli tässä
 | NFR-010 | 11.11.25 | Datan kerääminen (Käyttäjä) | Järjestelmä ei saa kerätä tai tallentaa mitään henkilökohtaista tunnistettavaa tietoa (PII) käyttäjistä. Reittihaut ovat väliaikaisia. | Korkea | Rajaus, GDPR. | Luonnos | Tietokanta (jos käytössä MVP:ssä) tai lokitiedostot eivät sisällä käyttäjien IP-osoitteita tai muita pysyviä tunnisteita. |
 | NFR-011 | 11.11.25 | Datan kerääminen (Ylläpito) | Järjestelmän tulee kerätä anonyymejä operationaalisia lokitietoja (esim. virheilmoitukset, API-vastausajat) vianjäljitystä varten. | Keskitaso | Ylläpidettävyys | Luonnos | Ylläpitäjä (kehitystiimi) näkee sovelluksen lokivirrat (esim. docker logs) ja voi diagnosoida NFR-005-tyypin virheitä. |
 
-#### 7.4.5 Alusta ja Ympäristö
+### Alusta ja Ympäristö
 
 Nämä vaatimukset määrittelevät teknisen ympäristön, jossa sovellusta ajetaan ja käytetään.
 
@@ -217,7 +217,7 @@ Nämä vaatimukset määrittelevät teknisen ympäristön, jossa sovellusta ajet
 | NFR-012 | 11.11.25 | Ajoalusta | Mikropalvelu (Python/REST) ja käyttöliittymä (Streamlit) ajetaan kontitetussa ympäristössä dclabra-infrastruktuurissa. | Korkea | Projektin vaatimus. | Luonnos | Sovellus on käynnistettävissä docker-compose up (tai vastaavalla) ja toimii GitLab-ympäristössä. |
 | NFR-013 | 11.11.25 | Tuetut selaimet | Web-käyttöliittymän (Streamlit) tulee toimia ja näyttää tiedot oikein yleisimmillä moderneilla selaimilla. | Keskitaso | Käytettävyys. | Luonnos | Sovellus on testattu toimivaksi vähintään Chromen ja Firefoxin uusimmilla desktop-versioilla. |
 
-#### 7.4.6 Turvallisuus (jos halutaan se määritellä)
+### Turvallisuus (jos halutaan se määritellä)
 
 | ID | Luotu / Muokattu | Lyhyt nimi | Kuvaus | Prioriteetti | Perustelu | Tila | Hyväksyntäkriteeri |
 |----|------------------|------------|--------|--------------|-----------|------|-------------------|

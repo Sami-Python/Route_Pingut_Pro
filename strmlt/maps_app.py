@@ -26,6 +26,8 @@ load_dotenv()
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
 pdk.settings.mapbox_api_key = MAPBOX_TOKEN
 API_URL = os.getenv("API_URL", "http://localhost:8001")
+API_URL_INTERNAL = "http://api:8000"
+API_URL_EXTERNAL = "http://localhost:8000"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://ttm-ollama-server:11434")
 
 # 2. Tuodaan funktiot
@@ -44,6 +46,53 @@ from utils.weather_client import get_rainviewer_data, get_closest_timestamp
 # AI Route Analysis
 from utils.route_intelligence import RouteIntelligence
 from utils.ai_analyzer import GeminiRouteAnalyzer
+
+# Local AI helper
+
+def get_ai_summary(route_summary, system_prompt):
+    api_url = "http://host.docker.internal:1234/v1"
+    try:
+        # User provides base URL like http://localhost:1234/v1
+        # We append the chat completions endpoint
+        url = f"{api_url.rstrip('/')}/chat/completions"
+        
+        # Prepare the user prompt from route data
+        prompt = f"Route Summary: {route_summary}"
+        
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7,
+            "max_tokens": -1, # Let nature take its course
+            "stream": True
+        }
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=60, stream=True)
+        if response.status_code == 200:
+            import json
+            for line in response.iter_lines():
+                if line:
+                    line_str = line.decode('utf-8')
+                    if line_str.startswith('data: '):
+                        data_str = line_str[6:]
+                        if data_str == '[DONE]':
+                            break
+                        try:
+                            json_data = json.loads(data_str)
+                            delta = json_data['choices'][0]['delta']
+                            if 'content' in delta:
+                                yield delta['content']
+                        except Exception:
+                            continue
+        else:
+            yield f"LLM Error: {response.status_code} - {response.text}"
+            
+    except Exception as e:
+        yield f"LLM Connection Error: {e}. Ensure LLM Studio is running and accessible."
+
 
 # ====================================================================
 # CALENDAR HELPERS
@@ -686,41 +735,23 @@ if st.session_state.all_routes and (not st.session_state.weather_host or not st.
         print(f"Weather cache error: {e}")
 
 # --- GOOGLE AUTH HANDLER ---
-# TEMPORARILY DISABLED TO DEBUG LOOP ISSUE
-# Check if returning from OAuth callback
-# if "gcal_auth" in st.query_params and st.query_params["gcal_auth"] == "success":
-#     try:
-#         token_file = os.path.join(tempfile.gettempdir(), "gcal_token_temp.json")
-#         print(f"DEBUG: Checking for token file: {token_file}")
-#         
-#         if os.path.exists(token_file):
-#             with open(token_file, "r") as f:
-#                 token_data = json.load(f)
-#             
-#             token_val = token_data.get("token")
-#             print(f"DEBUG: Token loaded from file. Length: {len(token_val)}")
-#             
-#             # Store in session
-#             st.session_state["gcal_token"] = token_val
-#             st.toast("Kirjauduttu Google-tilille! ✅")
-#             
-#             # Delete the temp file
-#             os.remove(token_file)
-#             print("DEBUG: Token file deleted.")
-#             
-#             # Clear the URL parameter and rerun ONCE
-#             st.query_params.clear()
-#             time.sleep(0.3)
-#             st.rerun()
-#         else:
-#             print("DEBUG: Token file not found!")
-#             st.error("Kirjautuminen epäonnistui - token puuttuu.")
-#             st.query_params.clear()
-#             
-#     except Exception as e:
-#         print(f"DEBUG: Auth Error: {e}")
-#         st.error(f"Kirjautumisvirhe: {e}")
-#         st.query_params.clear()
+# Check for token in query params
+if "gcal_access_token" in st.query_params:
+    try:
+        token = st.query_params["gcal_access_token"]
+        # Store in session
+        st.session_state["gcal_token"] = token
+        st.toast("Kirjauduttu Google-tilille! ✅")
+        
+        # Clear the URL parameter and rerun ONCE
+        st.query_params.clear()
+        time.sleep(0.3)
+        st.rerun()
+            
+    except Exception as e:
+        print(f"DEBUG: Auth Error: {e}")
+        st.error(f"Kirjautumisvirhe: {e}")
+        st.query_params.clear()
 
 
 
@@ -784,7 +815,7 @@ with st.sidebar:
             else:
                 gcal_events = gcal_evts
         else:
-                login_link = f"{API_URL}/gcal/login"
+                login_link = f"{API_URL_EXTERNAL}/gcal/login?redirect_url=http://localhost:8501/maps_app"
                 st.markdown(f"👉 **[Yhdistä Google Kalenteri]({login_link})**", unsafe_allow_html=True)
 
         # 3. Combine Events
@@ -1183,8 +1214,8 @@ with b1:
                     with st.spinner("Haetaan sääennusteet..."):
                         try:
                              # Default full Finland BBox from api_server
-                             resp_t = requests.get(f"{API_URL}/api/forecast/temperature", params={"hours": 6})
-                             resp_p = requests.get(f"{API_URL}/api/forecast/weather", params={"hours": 6})
+                             resp_t = requests.get(f"{API_URL_INTERNAL}/maps/api/forecast/temperature", params={"hours": 6})
+                             resp_p = requests.get(f"{API_URL_INTERNAL}/maps/api/forecast/weather", params={"hours": 6})
                              
                              if resp_t.status_code == 200: 
                                  st.session_state.meteo_temp = resp_t.json().get("data", [])
@@ -1504,34 +1535,55 @@ if st.session_state.all_routes:
                 
                 if st.button("Sulje", type="primary", use_container_width=True):
                     st.rerun()
+                
+        state = st.toggle("Käytä Gemini AI:ta", value=True, key="gemini_ai")
         
         if st.button("🚀 Analysoi", type="primary", use_container_width=True, key="ai_analyze_btn"):
-            with st.spinner("Analysoidaan..."):
-                try:
-                    analyzer = GeminiRouteAnalyzer()
-                    if not analyzer.test_connection():
-                        st.error("❌ Ei yhteyttä Gemini API:in")
-                    else:
-                        selected_idx = st.session_state.selected_route_index
-                        intelligence = RouteIntelligence(
-                            st.session_state.all_routes[selected_idx],
-                            st.session_state.dep_dt
-                        )
-                        route_data = intelligence.collect_all_data()
-                        data_summary = intelligence.summarize_for_ai()
-                        route_summary = st.session_state.route_summaries[selected_idx]
-                        
-                        analysis = analyzer.analyze_route(
-                            data_summary, route_summary,
-                            st.session_state.dep_dt, "", ""
-                        )
-                        
-                        st.session_state['ai_analysis'] = analysis
-                        st.session_state['ai_analysis_time'] = datetime.datetime.now()
-                        st.session_state['show_ai_popup'] = True  # Trigger popup
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"Virhe: {e}")
+            if state:
+                with st.spinner("Analysoidaan..."):
+                    try:
+                        analyzer = GeminiRouteAnalyzer()
+                        if not analyzer.test_connection():
+                            st.error("❌ Ei yhteyttä Gemini API:in")
+                        else:
+                            selected_idx = st.session_state.selected_route_index
+                            intelligence = RouteIntelligence(
+                                st.session_state.all_routes[selected_idx],
+                                st.session_state.dep_dt
+                            )
+                            route_data = intelligence.collect_all_data()
+                            data_summary = intelligence.summarize_for_ai()
+                            route_summary = st.session_state.route_summaries[selected_idx]
+                            
+                            analysis = analyzer.analyze_route(
+                                data_summary, route_summary,
+                                st.session_state.dep_dt, "", ""
+                            )
+                            
+                            st.session_state['ai_analysis'] = analysis
+                            st.session_state['ai_analysis_time'] = datetime.datetime.now()
+                            st.session_state['show_ai_popup'] = True  # Trigger popup
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Virhe: {e}")
+            else:
+                selected_idx = st.session_state.selected_route_index
+                intelligence = RouteIntelligence(
+                    st.session_state.all_routes[selected_idx],
+                    st.session_state.dep_dt
+                )
+                route_data = intelligence.collect_all_data()
+                data_summary = intelligence.summarize_for_ai()
+                route_summary = st.session_state.route_summaries[selected_idx]
+                llm_prompt = os.getenv("LLM_PROMPT")
+                summary_placeholder = st.empty()
+                full_response = ""
+                for chunk in get_ai_summary(route_summary, llm_prompt):
+                    full_response += chunk
+                    summary_placeholder.write(chunk)
+                summary_placeholder.info(full_response)
+
+
         
         # Show popup if flag is set
         if st.session_state.get('show_ai_popup', False):

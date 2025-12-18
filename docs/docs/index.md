@@ -1,3 +1,0 @@
-# Aloitussivu
-
-Sisältö tulossa.

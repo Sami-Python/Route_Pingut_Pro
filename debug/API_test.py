@@ -8,7 +8,11 @@ from typing import Tuple, Optional, Dict, Any
 
 # Asetukset ja API-avain
 # HUOM: Korvaa tämä oikealla HERE API -avaimellasi!
+<<<<<<< HEAD
 HERE_API_KEY = "os.environ.get('HERE_API_KEY')" # REDACTED FOR SECURITY
+=======
+HERE_API_KEY = "......"
+>>>>>>> 2ac424f011da62b5d6990ac92ac08cca9b79f65f
 # ====================================================================
 
 # --------------------------------------------------------------------

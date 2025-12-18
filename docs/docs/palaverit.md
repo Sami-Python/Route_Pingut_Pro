@@ -1,3 +1,0 @@
-# Palaverit
-
-Sisältö tulossa.

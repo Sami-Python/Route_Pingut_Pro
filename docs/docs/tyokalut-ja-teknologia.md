@@ -1,34 +1,37 @@
 # Työkalut ja teknologiat
 
-## 3 Työkalut ja teknologiat
-### 3.1 Kehitysympäristö
-Projektin kehitys toteutetaan mikropalveluarkkitehtuurin periaatteiden mukaisesti kontitetussa ympäristössä.
+## Kehitysympäristö
 
-### 3.2 Versionhallinta ja dokumentointi
-- **GitLab:** Projektin versionhallinta. Kaikki koodi, dokumentaatio ja konfiguraatiot tallennetaan ja hallitaan keskitetysti. Jokaisella tiimin jäsenellä on oma kehityshaara (branch), ja muutokset yhdistetään päähaaraan (main) vasta tarkistuksen ja testauksen jälkeen.GitLabin Issues- ja Merge Request -toiminnot tukevat sprinttien tehtävien hallintaa ja katselmointia. Kaikki commit-viestit kirjoitetaan kuvaavasti ja yhdenmukaisella käytännöllä.
-- **HedgeDoc:** Dokumentaatio tuotetaan Markdown-muodossa (README, Wiki) ja säilytetään GitLabissa. Ryhmän sisäistä dokumentointia ja kokousmuistioita varten käytetään HedgeDocia. 
-- **Clockify:** Työajanseuranta
-- **Swagger/OpenAPI:** Rajapintojen tekninen dokumentaatio laaditaan Swagger/OpenAPI-muodossa, mikä varmistaa rajapintojen läpinäkyvyyden ja helpon integroitavuuden muihin järjestelmiin.
+Projektin kehitys toteutetaan mikropalveluarkkitehtuurin periaatteiden mukaisesti kontitetussa ympäristössä. Kontitus mahdollistaa yhtenäisen ja toistettavan kehitysympäristön kaikille tiimin jäsenille sekä helpottaa sovelluksen siirrettävyyttä eri ympäristöjen välillä. Kehitysympäristö tukee mikropalvelun eriyttämistä omaksi kokonaisuudekseen ja mahdollistaa sen hallitun testaamisen ja jatkokehittämisen.
 
-### 3.3 Työkalut ja kirjastot
+## Versionhallinta ja dokumentointi
 
-**Kehitysympäristö ja versionhallinta**
+Projektin versionhallinta toteutetaan GitLab-alustalla, johon kaikki lähdekoodi, dokumentaatio ja konfiguraatiot tallennetaan keskitetysti. Jokaisella tiimin jäsenellä on oma kehityshaara/kehityshaarat, ja muutokset yhdistetään päähaaraan vasta tarkistuksen ja testauksen jälkeen. GitLabin Issues- ja Merge Request -toimintoja hyödynnetään sprinttien tehtävien hallintaan, katselmointiin ja muutosten arviointiin. Commit-viestit kirjoitetaan yhdenmukaisella ja kuvaavalla tavalla, mikä parantaa muutosten jäljitettävyyttä.
 
+Dokumentaatio tuotetaan Markdown-muodossa ja säilytetään osana projektin versionhallintaa. Tekniseen dokumentaatioon käytetään tätä MkDocs-työkalua, jonka avulla dokumentaatio voidaan esittää selkeänä ja helposti navigoitavana kokonaisuutena. Ryhmän sisäiseen yhteiskirjoittamiseen ja kokousmuistioihin hyödynnetään HedgeDocia, ja projektin yleinen dokumentaatio pidetään saatavilla myös GitLab Wikissä. Työajanseurantaan käytetään Clockify-työkalua, jonka avulla projektin ajankäyttöä voidaan seurata ja arvioida.
+
+Rajapintojen tekninen dokumentaatio laaditaan Swagger/OpenAPI-standardin mukaisesti. Tämä varmistaa rajapintojen läpinäkyvyyden, selkeyden ja helpon integroitavuuden muihin järjestelmiin sekä tukee mikropalvelun jatkokehitystä.
+
+## Työkalut ja kirjastot
+
+Kehitystyössä hyödynnetään useita ohjelmistotyökaluja ja kirjastoja, jotka tukevat mikropalvelun toteutusta, viestintää ja dokumentointia. Kontitukseen ja kehitysympäristön hallintaan käytetään Dockeria, ja versionhallinta sekä jatkuva integraatio toteutetaan GitLabin avulla. Tiimin sisäisessä viestinnässä käytetään Microsoft Teamsia ja Discordia, jotka tukevat sekä suunnittelua että päivittäistä yhteistyötä.
+
+Mikropalvelun rajapinnat ja sovelluslogiikka toteutetaan Python-pohjaisilla teknologioilla. FastAPI toimii REST-rajapintojen kehityskehyksenä ja Uvicorn ASGI-palvelimena. Web-käyttöliittymän toteutuksessa hyödynnetään Streamlitia. Ulkoisten palveluiden kanssa kommunikointi toteutetaan HTTP-pyyntöjen avulla, ja datan käsittelyssä hyödynnetään Pandas- ja NumPy-kirjastoja. Kartta- ja reittitietojen visualisointiin käytetään Pydeck- ja Plotly-kirjastoja, ja HERE Maps -palvelun reittidatan käsittelyssä hyödynnetään Flexpolyline-kirjastoa.
+
+Sovellus hyödyntää useita avoimia ja kaupallisia rajapintoja, kuten HERE Maps -kartta- ja reitityspalvelua, Open-Meteo-säärajapintaa sekä Fintrafficin avointa liikennedataa. Lisäksi käytössä ovat Google Calendar API ja Microsoft Graph API, joiden avulla palvelu voidaan integroida käyttäjän kalenteripalveluihin. Ympäristömuuttujien hallinnassa käytetään python-dotenv-kirjastoa ja päivämäärä- sekä aikakäsittelyssä python-dateutil-kirjastoa.
+
+## Linkit
 Docker - Kontitus ja kehitysympäristö  
 [Dokumentaatio](https://docs.docker.com/)
 
 GitLab - Versionhallinta ja CI/CD  
 [Dokumentaatio](https://docs.gitlab.com/)
 
-**Kommunikaatio**
-
 Microsoft Teams - Tiimin viestintä  
 [Dokumentaatio](https://docs.microsoft.com/en-us/microsoftteams/)
 
 Discord - Reaaliaikainen kommunikaatio
 [Dokumentaatio](https://discord.com/developers/docs)
-
-**Dokumentaatio**
 
 HedgeDoc - Yhteiskirjoittaminen
 [Dokumentaatio](https://docs.hedgedoc.org/)
@@ -38,8 +41,6 @@ MkDocs - Tekninen dokumentaatio
 
 GitLab Wiki - Projektidokumentaatio
 [Dokumentaatio](https://docs.gitlab.com/ee/user/project/wiki/)
-
-**API-integraatiot**
 
 HERE Maps - Kartta- ja reitityspalvelut
 [Dokumentaatio](https://developer.here.com/documentation)

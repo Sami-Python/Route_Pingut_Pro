@@ -33,7 +33,7 @@ async def root():
     return {"message": "Welcome to the Google Calendar API. Go to /login to start."}
 
 @app.get("/login")
-async def login(request: Request):
+async def login(request: Request, redirect_url: str = None):
     """
     Initiates the OAuth2 flow.
     """
@@ -50,12 +50,17 @@ async def login(request: Request):
     )
     
     # Generate the authorization URL
-    auth_url, _ = flow.authorization_url(prompt="consent")
+    # Pass the redirect_url as state if provided
+    kwargs = {"prompt": "consent"}
+    if redirect_url:
+        kwargs["state"] = redirect_url
+        
+    auth_url, _ = flow.authorization_url(**kwargs)
     
     return RedirectResponse(auth_url)
 
 @app.get("/callback", name="gcal_callback")
-async def callback(request: Request, code: str):
+async def callback(request: Request, code: str, state: str = None):
     """
     Handles the OAuth2 callback, exchanges code for token, and redirects to frontend.
     Uses a temporary file to pass the token to avoid URL parameter loops.
@@ -73,18 +78,22 @@ async def callback(request: Request, code: str):
         flow.fetch_token(code=code)
         creds = flow.credentials
         
-        # Store token in a temporary file instead of URL parameter
-        token_file = os.path.join(tempfile.gettempdir(), "gcal_token_temp.json")
-        with open(token_file, "w") as f:
-            json.dump({
-                "token": creds.token,
-                "timestamp": datetime.datetime.now().isoformat()
-            }, f)
-        print(f"Token stored in: {token_file}")
+        # Redirect logic:
+        # 1. If state parameter is present, use it as the redirect URL.
+        # 2. Otherwise receive FRONTEND_URL environment variable.
+        # 3. Default to localhost:8501.
         
-        # Redirect to Streamlit app WITHOUT token in URL
-        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8501")
-        redirect_url = f"{frontend_url}?gcal_auth=success"
+        if state:
+            redirect_base = state
+        else:
+            redirect_base = os.getenv("FRONTEND_URL", "http://localhost:8501")
+            
+        # Append token and success flag
+        # Check if the url already has query params
+        if "?" in redirect_base:
+            redirect_url = f"{redirect_base}&gcal_auth=success&gcal_access_token={creds.token}"
+        else:
+            redirect_url = f"{redirect_base}?gcal_auth=success&gcal_access_token={creds.token}"
         
         return RedirectResponse(url=redirect_url)
 
@@ -137,7 +146,11 @@ async def get_events(token: str, calendar_id: str = "primary"):
             )
             .execute()
         )
+<<<<<<< HEAD
         return cal_utils.get_events_from_gcal(events_result.get("items", []))
+=======
+        return utils.cal_utils.get_events_from_gcal(events_result.get("items", []))
+>>>>>>> 2ac424f011da62b5d6990ac92ac08cca9b79f65f
 
     except HttpError as error:
         return {"error": str(error)}
