@@ -15,7 +15,7 @@ Projekti koostuu kolmesta Docker-kontista:
                            ▼
                     ┌──────────────┐
                     │  MkDocs      │
-                    │  (Docs:8080) │
+                    │  (Docs:80) │
                     └──────────────┘
 ```
 
