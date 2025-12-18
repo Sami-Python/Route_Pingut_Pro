@@ -9,13 +9,13 @@ Projekti koostuu kolmesta Docker-kontista:
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │  Streamlit  │────▶│   FastAPI    │────▶│  Ext. APIs  │
-│  (UI:8501)  │     │  (API:8000)  │     │   (Integr.) │
+│ (Localhost) │     │ (Localhost)  │     │   (Integr.) │
 └─────────────┘     └──────────────┘     └─────────────┘
                            │
                            ▼
                     ┌──────────────┐
                     │  MkDocs      │
-                    │  (Docs:80) │
+                    │  (Localhost) │
                     └──────────────┘
 ```
 
@@ -44,7 +44,6 @@ Backend:
 Frontend:
 - Streamlit
 - PyDeck (kartta)
-- Plotly (graafit)
 
 Infra:
 - Docker + Docker Compose
@@ -78,7 +77,7 @@ docker compose logs -f
 - Streamlit UI: http://localhost:8501
 - FastAPI: http://localhost:8000
 - API Docs: http://localhost:8000/docs
-- Dokumentaatio: http://localhost:8080
+- Dokumentaatio: http://localhost:80
 
 ## Ympäristömuuttujat
 
