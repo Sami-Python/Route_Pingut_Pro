@@ -44,13 +44,13 @@ def traffic_messages_near_route(coords: List[Tuple[float, float]], buffer_meters
         params["bbox"] = bbox_str
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
         
         # Jos bbox failaa silti, yritetään ilman (fallback)
         if resp.status_code in [400, 413, 414] and "bbox" in params:
             # print("Digitraffic bbox fail, fetching all messages...") # Hiljennetään printti
             del params["bbox"]
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
+            resp = requests.get(url, params=params, headers=headers, timeout=30)
             
         resp.raise_for_status()
         data = resp.json()
@@ -123,7 +123,7 @@ def traffic_messages_near_point(lat: float, lon: float, radius: float = 50.0) ->
     }
 
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=5)
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -181,7 +181,7 @@ def fetch_weather_cam_data() -> Dict[str, Any]:
     url = "https://tie.digitraffic.fi/api/weathercam/v1/stations"
     headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=30)
         return resp.json()
     except Exception as e:
         print(f"Camera API error: {e}")
@@ -300,8 +300,8 @@ def fetch_road_weather_data() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     url_data = "https://tie.digitraffic.fi/api/weather/v1/stations/data"
     headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
     try:
-        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
-        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        resp_meta = requests.get(url_meta, headers=headers, timeout=30)
+        resp_data = requests.get(url_data, headers=headers, timeout=30)
         return resp_meta.json(), resp_data.json()
     except Exception as e:
         print(f"Road Weather API error: {e}")
@@ -435,7 +435,7 @@ def fetch_vms_data() -> Dict[str, Any]:
     url = "https://tie.digitraffic.fi/api/variable-sign/v1/signs"
     headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=30)
         return resp.json()
     except Exception as e:
         print(f"VMS API error: {e}")
@@ -512,7 +512,7 @@ def get_maintenance_data(route_coords: List[Tuple[float, float]], buffer_meters:
     }
     
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        resp = requests.get(url, headers=headers, timeout=30)
         data = resp.json()
     except Exception as e:
         print(f"Maintenance API error: {e}")
@@ -545,8 +545,8 @@ def fetch_lam_data() -> Tuple[Dict[str, Any], Dict[str, Any]]:
     url_data = "https://tie.digitraffic.fi/api/tms/v1/stations/data"
     headers = { "User-Agent": "StreamlitApp/1.0 (gzip)", "Accept-Encoding": "gzip" }
     try:
-        resp_meta = requests.get(url_meta, headers=headers, timeout=10)
-        resp_data = requests.get(url_data, headers=headers, timeout=10)
+        resp_meta = requests.get(url_meta, headers=headers, timeout=30)
+        resp_data = requests.get(url_data, headers=headers, timeout=30)
         return resp_meta.json(), resp_data.json()
     except Exception as e:
         print(f"LAM API error: {e}")

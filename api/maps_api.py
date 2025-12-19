@@ -115,6 +115,13 @@ class CalendarEvent(BaseModel):
     end: str
     location: Optional[str] = None
 
+class DigitrafficRequest(BaseModel):
+    route_coords: Optional[str] = None
+    polyline: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    radius: float = 50.0
+
 # ====================================================================
 # FASTAPI APP
 # ====================================================================
@@ -305,78 +312,60 @@ def parse_route_coords(route_coords: str) -> List[Tuple[float, float]]:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Virheellinen koordinaattimuoto: {e}")
 
-@app.get("/digitraffic/cameras", response_model=WeatherCameraResponse, tags=["Digitraffic"])
-def api_weather_cameras(
-    route_coords: Optional[str] = Query(None, description="Reitin koordinaatit CSV-muodossa"),
-    polyline: Optional[str] = Query(None, description="Reitin flexpolyline-merkkijono"),
-    lat: Optional[float] = Query(None, description="Leveysaste (jos ei reittiä)"),
-    lon: Optional[float] = Query(None, description="Pituusaste (jos ei reittiä)"),
-    radius: float = Query(50.0, description="Hakusäde km")
-):
+@app.post("/digitraffic/cameras", response_model=WeatherCameraResponse, tags=["Digitraffic"])
+def api_weather_cameras(req: DigitrafficRequest):
     """
-    Hakee kelikamerat reitin varrelta TAI tietystä pisteestä.
+    Hakee kelikamerat reitin varrelta TAI tietystä pisteestä (POST).
     """
-    if polyline:
-        decoded = decode_polyline(polyline)
+    if req.polyline:
+        decoded = decode_polyline(req.polyline)
         coords = [(p[0], p[1]) for p in decoded]
         cameras = get_weather_cameras(coords)
-    elif route_coords:
-        coords = parse_route_coords(route_coords)
+    elif req.route_coords:
+        coords = parse_route_coords(req.route_coords)
         cameras = get_weather_cameras(coords)
-    elif lat is not None and lon is not None:
-        cameras = get_weather_cameras_by_point(lat, lon, radius)
+    elif req.lat is not None and req.lon is not None:
+        cameras = get_weather_cameras_by_point(req.lat, req.lon, req.radius)
     else:
-        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon")
+        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon body:ssa")
         
     return WeatherCameraResponse(cameras=cameras, count=len(cameras))
 
-@app.get("/digitraffic/messages", response_model=TrafficMessageResponse, tags=["Digitraffic"])
-def api_traffic_messages(
-    route_coords: Optional[str] = Query(None, description="Reitin koordinaatit CSV-muodossa"),
-    polyline: Optional[str] = Query(None, description="Reitin flexpolyline-merkkijono"),
-    lat: Optional[float] = Query(None, description="Leveysaste (jos ei reittiä)"),
-    lon: Optional[float] = Query(None, description="Pituusaste (jos ei reittiä)"),
-    radius: float = Query(50.0, description="Hakusäde km")
-):
+@app.post("/digitraffic/messages", response_model=TrafficMessageResponse, tags=["Digitraffic"])
+def api_traffic_messages(req: DigitrafficRequest):
     """
-    Hakee liikennetiedotteet reitin varrelta TAI tietystä pisteestä.
+    Hakee liikennetiedotteet reitin varrelta TAI tietystä pisteestä (POST).
     """
-    if polyline:
-        decoded = decode_polyline(polyline)
+    if req.polyline:
+        decoded = decode_polyline(req.polyline)
         coords = [(p[0], p[1]) for p in decoded]
         messages = traffic_messages_near_route(coords)
-    elif route_coords:
-        coords = parse_route_coords(route_coords)
+    elif req.route_coords:
+        coords = parse_route_coords(req.route_coords)
         messages = traffic_messages_near_route(coords)
-    elif lat is not None and lon is not None:
-        messages = traffic_messages_near_point(lat, lon, radius)
+    elif req.lat is not None and req.lon is not None:
+        messages = traffic_messages_near_point(req.lat, req.lon, req.radius)
     else:
-        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon")
+        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon body:ssa")
         
     return TrafficMessageResponse(messages=messages, count=len(messages))
 
-@app.get("/digitraffic/road-weather", response_model=RoadWeatherResponse, tags=["Digitraffic"])
-def api_road_weather(
-    route_coords: Optional[str] = Query(None, description="Reitin koordinaatit CSV-muodossa"),
-    polyline: Optional[str] = Query(None, description="Reitin flexpolyline-merkkijono"),
-    lat: Optional[float] = Query(None, description="Leveysaste"),
-    lon: Optional[float] = Query(None, description="Pituusaste"),
-    radius: float = Query(50.0, description="Hakusäde km")
-):
+@app.post("/digitraffic/road-weather", response_model=RoadWeatherResponse, tags=["Digitraffic"])
+def api_road_weather(req: DigitrafficRequest):
     """
-    Hakee tiesääasemat reitin varrelta TAI tietystä pisteestä.
+    Hakee tiesääasemat reitin varrelta TAI tietystä pisteestä (POST).
     """
-    if polyline:
-        decoded = decode_polyline(polyline)
+    if req.polyline:
+        decoded = decode_polyline(req.polyline)
         coords = [(p[0], p[1]) for p in decoded]
         stations = get_road_weather_stations(coords)
-    elif route_coords:
-        coords = parse_route_coords(route_coords)
+    elif req.route_coords:
+        coords = parse_route_coords(req.route_coords)
         stations = get_road_weather_stations(coords)
-    elif lat is not None and lon is not None:
-        stations = get_road_weather_stations_by_point(lat, lon, radius)
+    elif req.lat is not None and req.lon is not None:
+        stations = get_road_weather_stations_by_point(req.lat, req.lon, req.radius)
     else:
-        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon")
+        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon body:ssa")
         
     return RoadWeatherResponse(stations=stations, count=len(stations))
 
@@ -402,28 +391,22 @@ def api_maintenance(
     tasks = get_maintenance_data(coords)
     return MaintenanceResponse(tasks=tasks, count=len(tasks))
 
-@app.get("/digitraffic/lam", response_model=LAMResponse, tags=["Digitraffic"])
-def api_lam(
-    route_coords: Optional[str] = Query(None, description="Reitin koordinaatit CSV-muodossa"),
-    polyline: Optional[str] = Query(None, description="Reitin flexpolyline-merkkijono"),
-    lat: Optional[float] = Query(None, description="Leveysaste"),
-    lon: Optional[float] = Query(None, description="Pituusaste"),
-    radius: float = Query(50.0, description="Hakusäde km")
-):
+@app.post("/digitraffic/lam", response_model=LAMResponse, tags=["Digitraffic"])
+def api_lam(req: DigitrafficRequest):
     """
-    Hakee LAM-mittauspisteet reitin varrelta TAI säteellä.
+    Hakee LAM-mittauspisteet reitin varrelta TAI säteellä (POST).
     """
-    if polyline:
-        decoded = decode_polyline(polyline)
+    if req.polyline:
+        decoded = decode_polyline(req.polyline)
         coords = [(p[0], p[1]) for p in decoded]
         stations = get_lam_stations(coords)
-    elif route_coords:
-        coords = parse_route_coords(route_coords)
+    elif req.route_coords:
+        coords = parse_route_coords(req.route_coords)
         stations = get_lam_stations(coords)
-    elif lat is not None and lon is not None:
-        stations = get_lam_stations_by_point(lat, lon, radius)
+    elif req.lat is not None and req.lon is not None:
+        stations = get_lam_stations_by_point(req.lat, req.lon, req.radius)
     else:
-        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon")
+        raise HTTPException(status_code=400, detail="Anna joko polyline, route_coords tai lat/lon body:ssa")
 
     return LAMResponse(stations=stations, count=len(stations))
 

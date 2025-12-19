@@ -146,11 +146,7 @@ async def get_events(token: str, calendar_id: str = "primary"):
             )
             .execute()
         )
-<<<<<<< HEAD
         return cal_utils.get_events_from_gcal(events_result.get("items", []))
-=======
-        return utils.cal_utils.get_events_from_gcal(events_result.get("items", []))
->>>>>>> 2ac424f011da62b5d6990ac92ac08cca9b79f65f
 
     except HttpError as error:
         return {"error": str(error)}

@@ -160,11 +160,7 @@ async def get_events(token: str, calendar_id: Optional[str] = None):
     if response.status_code != 200:
         return {"error": "Failed to fetch events", "status": response.status_code, "details": response.json()}
     
-<<<<<<< HEAD
     return cal_utils.get_events_from_outlook(response.json())
-=======
-    return utils.cal_utils.get_events_from_outlook(response.json())
->>>>>>> 2ac424f011da62b5d6990ac92ac08cca9b79f65f
     #return response.json()
 
 if __name__ == "__main__":

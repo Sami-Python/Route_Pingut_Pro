@@ -7,14 +7,24 @@
 - **Lopetus:** 23:07
 - **Yhteensä:** ~3 tuntia
 
-source .venv/Scripts/activate
+```source .venv/Scripts/activate```
+
+```powershell
+docker-compose -f open_meteo/docker-compose.yml up -d
+```
+
 streamlit: uvicorn api.main:app --reload
-PowerShell Android: flutter run
-*Bash Android: uvicorn api.main:app --reload --host 0.0.0.0*
+PowerShell Android: PS C:\Users\samih\code\pingut-projekti-4\reitti_pro_mobile>
+```flutter run```
+*Bash Android: ```uvicorn api.main:app --reload --host 0.0.0.0```
 
 uuden version työntö puhelimeen PowerShell-> 
 \reitti_pro_mobile> 
 flutter run --release
+
+tai PowerShell->
+.\.venv\Scripts\activate
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 
 Gitlab <-> GitHub

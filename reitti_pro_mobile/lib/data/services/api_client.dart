@@ -6,8 +6,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: dotenv.env['API_URL'] ?? 'http://192.168.1.130:8000',
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
       headers: {
         'Content-Type': 'application/json',
       },
@@ -95,9 +95,9 @@ class ApiClient {
         queryParams['lon'] = lon;
       }
 
-      final response = await _dio.get(
+      final response = await _dio.post(
         '/maps/digitraffic/cameras',
-        queryParameters: queryParams,
+        data: queryParams,
       );
       return response.data['cameras'];
     } catch (e) {
@@ -121,9 +121,9 @@ class ApiClient {
         queryParams['lon'] = lon;
       }
 
-      final response = await _dio.get(
+      final response = await _dio.post(
         '/maps/digitraffic/road-weather',
-        queryParameters: queryParams,
+        data: queryParams,
       );
       return response.data['stations'];
     } catch (e) {
@@ -147,9 +147,9 @@ class ApiClient {
         queryParams['lon'] = lon;
       }
       
-      final response = await _dio.get(
+      final response = await _dio.post(
         '/maps/digitraffic/messages',
-        queryParameters: queryParams,
+        data: queryParams,
       );
       return response.data['messages'];
     } catch (e) {
@@ -173,9 +173,9 @@ class ApiClient {
         queryParams['lon'] = lon;
       }
       
-      final response = await _dio.get(
+      final response = await _dio.post(
         '/maps/digitraffic/lam',
-        queryParameters: queryParams,
+        data: queryParams,
       );
       return response.data['stations'];
     } catch (e) {
