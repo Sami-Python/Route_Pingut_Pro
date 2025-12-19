@@ -6,7 +6,8 @@ import '../../data/services/api_client.dart';
 import '../../data/services/favorites_service.dart';
 import '../../data/services/storage_service.dart'; // Import StorageService
 import '../widgets/mini_map_widget.dart';
-import '../widgets/penguin_loader.dart'; // Import PenguinLoader
+import '../widgets/penguin_loader.dart';
+import '../../data/services/google_calendar_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -336,6 +337,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  Future<void> _showCalendarDialog() async {
+    final service = ref.read(googleCalendarServiceProvider);
+    
+    // Check if signed in, if not sign in
+    if (service.currentUser == null) {
+      try {
+        final user = await service.signIn();
+        if (user == null) return; // User cancelled
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Kirjautuminen epäonnistui: $e')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    // Show dialog with FutureBuilder
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('📅 Kalenteritapahtumat'),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: FutureBuilder<List<CalendarEvent>>(
+            future: service.getEvents(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: PenguinLoader(size: 40));
+              }
+              if (snapshot.hasError) {
+                return Center(child: Text('Virhe: ${snapshot.error}'));
+              }
+              
+              final events = snapshot.data ?? [];
+              if (events.isEmpty) {
+                return const Center(child: Text('Ei tulevia tapahtumia'));
+              }
+
+              return ListView.builder(
+                itemCount: events.length,
+                itemBuilder: (context, index) {
+                  final event = events[index];
+                  // Parse dates for display
+                  final start = DateTime.tryParse(event.start);
+                  final timeStr = start != null 
+                      ? '${start.day}.${start.month}. klo ${start.hour}:${start.minute.toString().padLeft(2, '0')}' 
+                      : event.start;
+
+                  return ListTile(
+                    title: Text(event.title),
+                    subtitle: Text('$timeStr\n📍 ${event.location}'),
+                    isThreeLine: true,
+                    onTap: () {
+                      if (event.location.isNotEmpty) {
+                        setState(() {
+                          _destController.text = event.location;
+                           _useCurrentLocation = false;
+                        });
+                      }
+                      
+                      if (start != null) {
+                        setState(() {
+                          _selectedDate = start;
+                          _selectedTime = TimeOfDay.fromDateTime(start);
+                          _isArrivalTime = false; // Set as Departure Time
+                        });
+                      }
+                      
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Reittitiedot haettu kalenterista!')),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Sulje'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -346,6 +441,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             icon: const Icon(Icons.star),
             onPressed: _showFavoritesDialog,
             tooltip: 'Suosikit',
+          ),
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: _showCalendarDialog,
+            tooltip: 'Kalenteri',
           ),
           IconButton(
             icon: const Icon(Icons.save),

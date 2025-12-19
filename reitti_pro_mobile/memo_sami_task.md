@@ -22,6 +22,7 @@
 - **Suosikkipaikat (Local Storage)** ✅
 - **Reitin jakaminen** ✅
 - **Vaihtoehtoiset reitit (3 kpl)** ✅
+- **Google Kalenteri -integraatio** ✅ (Tapahtumien sync reittihakuun)
 
 ### 🎨 Branding
 - Nimi: **🐧 Pingut Reitti Pro**

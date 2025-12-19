@@ -121,6 +121,42 @@ async def get_calendars(token: str):
     except HttpError as error:
         return {"error": str(error)}
 
+from pydantic import BaseModel
+
+class TokenRequest(BaseModel):
+    token: str
+    calendar_id: str = "primary"
+
+@app.post("/events")
+async def get_events_post(req: TokenRequest):
+    """
+    Lists the upcoming 10 events (POST version).
+    """
+    if not req.token:
+        raise HTTPException(status_code=401, detail="Missing access token")
+
+    try:
+        creds = Credentials(token=req.token)
+        service = build(API_SERVICE_NAME, API_VERSION, credentials=creds)
+
+        now = datetime.datetime.now(tz=datetime.timezone.utc).isoformat()
+        
+        events_result = (
+            service.events()
+            .list(
+                calendarId=req.calendar_id,
+                timeMin=now,
+                maxResults=10,
+                singleEvents=True,
+                orderBy="startTime",
+            )
+            .execute()
+        )
+        return cal_utils.get_events_from_gcal(events_result.get("items", []))
+
+    except HttpError as error:
+        return {"error": str(error)}
+
 @app.get("/events")
 async def get_events(token: str, calendar_id: str = "primary"):
     """

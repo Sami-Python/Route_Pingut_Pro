@@ -780,3 +780,61 @@ APK asennettu fyysiseen laitteeseen ja **TOIMII!** Kartta latautuu, reitit löyt
   - ❄️ Liukas keli (Pakkanen + Sade)
   - 💨 Kova tuuli (> 15 m/s, vaati backend-muutoksen `wind_speed`)
 - **UI:** Punainen "Pilleri" kartalla, jos vaaraa havaitaan. Yläpalkissa (i)-nappi selitteille.
+
+## 2025-12-19 - Android Icon, Timeout-korjaukset ja Google Calendar 🐧📅
+
+### Työaika
+- **Aloitus:** 19:30
+- **Lopetus:** 20:45
+- **Yhteensä:** ~1h 15min
+
+### Tehdyt tehtävät
+
+#### 1. Yhteysongelmien ratkaisu (Connection Timeout) 🔌
+- **Ongelma:** Android-sovellus sai jatkuvasti "Connection timed out" (errno 110) digitaffic-datan haussa.
+- **Syy 1 (URL pituus):** `GET` pyynnöt olivat liian pitkiä (polyline query param), mikä aiheutti joidenkin verkkolaitteiden/proxien hylkäämisen.
+- **Syy 2 (Firewall):** Windows Firewall blokkasi sisääntulevan liikenteen.
+- **Ratkaisu:**
+  - Muutettu backend endpointit (`/digitraffic/...`) käyttämään `POST`-metodia query parametrien sijaan.
+  - Luotu PowerShell-scripti (`fix_firewall.ps1`) porttien 8000 ja 8081 avaamiseen.
+  - Nostettu backendin sisäisiä aikakatkaisuja (timeout) 30 sekuntiin.
+
+#### 2. Android App Icon 🎨
+- **Ongelma:** Oletus Flutter-ikoni ei vaihtunut, ja iOS-konfiguraatio kaatoi skriptin Windowsilla.
+- **Ratkaisu:**
+  - Konfiguroitu `flutter_launcher_icons` oikein (`ios: false`).
+  - Lisätty uusi custom-ikoni (karttapohja).
+  - Ajettu generointi onnistuneesti.
+
+#### 3. Google Calendar Integraatio 🗓️
+- **Tavoite:** Tuoda kalenteritapahtumat suoraan reittihakuun.
+- **Haasteet:**
+  - `403 Forbidden` - API ei ollut päällä Consolessa.
+  - SHA-1 sormenjäljen puuttuminen Esti Native sign-in toiminnan.
+  - Tyyppivirhe Flutterissa, kun backend palautti virheviestin (Map) listan (List) sijaan.
+- **Toteutus:**
+  - **Backend:** Uusi `POST /gcal/events` endpoint, joka ottaa tokenin bodyssä (tietoturvallisempi).
+  - **Mobiili:**
+    - `google_sign_in` paketti natiiviin kirjautumiseen.
+    - Uusi `GoogleCalendarService`.
+    - UI: Kalenterinappi etusivulle -> Dialogi tapahtumista.
+    - Klikkaamalla tapahtumaa sijainti täyttyy automaattisesti määränpääksi!
+  - **Konfiguraatio:**
+    - Lisätty SHA-1 sormenjälki Google Cloud Consoleen.
+    - Lisätty testikäyttäjä OAuth Consent Screenille.
+    - Enabloitu Google Calendar API.
+
+### Tulokset
+✅ **Yhteys vakaa:** Ei enää timeout-virheitä.
+✅ **Uusi ilme:** Oikea sovellusikoni valikossa.
+✅ **Kalenteri toimii:** "Access granted" - käyttäjä voi valita seuraavan tapaamisen ja reitittää sinne yhdellä klikkauksella.
+
+### Oppimiskokemukset
+- **Native vs Web OAuth:** Androidilla "Native Flow" (SHA-1 fingerprint) on paljon suoraviivaisempi kuin client secret JSONin pyörittely.
+- **Virhetilanteet:** Kun backend palauttaa virheen JSON-objektina, Flutterin tyypitys (`List<dynamic>`) voi kaatua. Tärkeää tarkistaa onko vastaus virhe (Map) vai data (List).
+- **Pitkät URL:t:** Älä koskaan lähetä piiitkiä listoja (kuten polyline) GET-parametreina. POST on ystävä.
+
+### Seuraavat askeleet
+- Käyttäjätestaus Kalenteri-ominaisuudelle.
+- Mahdollisesti reittihälytykset kalenteritapahtuman perusteella ("Lähde nyt ehtiäksesi hammaslääkäriin").
+

@@ -259,4 +259,28 @@ class ApiClient {
       return [];
     }
   }
+
+  // Google Calendar Events
+  Future<List<dynamic>> fetchGoogleEvents(String token) async {
+    try {
+      final response = await _dio.post(
+        '/gcal/events',
+        data: {'token': token},
+      );
+      
+      if (response.data is Map && response.data.containsKey('error')) {
+        throw Exception('Google API Error: ${response.data['error']}');
+      }
+
+      if (response.data is List) {
+        return response.data;
+      }
+      
+      throw Exception('Unexpected response format: ${response.data.runtimeType}');
+
+    } catch (e) {
+      print('Google Calendar API error: $e');
+      throw Exception('Failed to fetch events: $e');
+    }
+  }
 }
