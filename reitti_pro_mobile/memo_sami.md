@@ -833,8 +833,25 @@ APK asennettu fyysiseen laitteeseen ja **TOIMII!** Kartta latautuu, reitit löyt
 - **Native vs Web OAuth:** Androidilla "Native Flow" (SHA-1 fingerprint) on paljon suoraviivaisempi kuin client secret JSONin pyörittely.
 - **Virhetilanteet:** Kun backend palauttaa virheen JSON-objektina, Flutterin tyypitys (`List<dynamic>`) voi kaatua. Tärkeää tarkistaa onko vastaus virhe (Map) vai data (List).
 - **Pitkät URL:t:** Älä koskaan lähetä piiitkiä listoja (kuten polyline) GET-parametreina. POST on ystävä.
+- **Pitkät URL:t:** Älä koskaan lähetä piiitkiä listoja (kuten polyline) GET-parametreinä. POST on ystävä.
 
 ### Seuraavat askeleet
 - Käyttäjätestaus Kalenteri-ominaisuudelle.
 - Mahdollisesti reittihälytykset kalenteritapahtuman perusteella ("Lähde nyt ehtiäksesi hammaslääkäriin").
 
+## 2025-12-20 - Palveluiden tilan tarkistus
+
+### Työaika
+- **Tarkistus:** Aamupäivä
+- **Yhteensä:** ~10 min
+
+### Tehdyt tehtävät
+
+#### 1. Palveluiden tilan tarkistus
+- Varmistettu backend-palveluiden toiminta.
+- **API (FastAPI):** Käynnissä portissa `8000` (Swagger UI vastaa).
+- **Streamlit:** Käynnissä portissa `8001`.
+- *Huomio:* Aiemmassa merkinnässä (6.12.) mainittu portti 8001 backendille ei pidä paikkaansa nykyisessä konfiguraatiossa (tai se on palautettu porttiin 8000). Nykyinen tila: API=8000, Streamlit=8001.
+
+### Tulokset
+✅ Kaikki palvelut käynnissä ja vastaavat.

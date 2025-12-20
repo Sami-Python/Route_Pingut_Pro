@@ -39,7 +39,7 @@ Sovellus tarvitsee toimiakseen Python-pohjaisen backendin (Pingut API).
 
 **Vaihtoehto A: Manuaalinen käynnistys (Suositeltu kehitykseen)**
 ```bash
-# Projektin juuressa (c:\Users\samih\code\pingut-projekti-4)
+# Projektin juuressa (c:\Users....)
 pip install -r requirements.txt
 uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```

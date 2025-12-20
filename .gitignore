@@ -254,3 +254,5 @@ $RECYCLE.BIN/
 
 # Flutter environment variables
 reitti_pro_mobile/assets/.env
+reitti_pro_mobile/BACKEND_SETUP.md reitti_pro_mobile/ENV_SETUP.md reitti_pro_mobile/FLUTTER_INSTALL.md reitti_pro_mobile/README.md reitti_pro_mobile/SETUP.md reitti_pro_mobile/docu.md reitti_pro_mobile/memo_sami.md reitti_pro_mobile/memo_sami_task.md
+reitti_pro_mobile/**/*.md
