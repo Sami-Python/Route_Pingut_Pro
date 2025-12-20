@@ -31,7 +31,7 @@
 Kun Flutter on asennettu, aja:
 
 ```bash
-cd c:\Users\samih\code\pingut-projekti-4
+cd c:\Users....
 flutter create reitti_pro_mobile
 cd reitti_pro_mobile
 ```
